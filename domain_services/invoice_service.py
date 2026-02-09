@@ -6,9 +6,6 @@ class InvoiceService:
         self.client = RestClient()
 
     def get_invoice_by_id(self, invoice_id: int):
-        if not isinstance(invoice_id, int):
-            raise ValueError("InvoiceId must be numeric")
-
         endpoint = "/fscmRestApi/resources/11.13.18.05/invoices"
         params = {
             "q": f"InvoiceId={invoice_id}",

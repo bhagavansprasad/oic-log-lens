@@ -6,7 +6,7 @@ service = InvoiceService()
 
 
 @router.get("/invoice/{invoice_id}")
-def get_invoice_by_id(invoice_id: int):
+def get_invoice_by_id(invoice_id: str):
     try:
         invoice = service.get_invoice_by_id(invoice_id)
 

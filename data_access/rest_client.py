@@ -32,7 +32,7 @@ class RestClient:
             "items": [
                 {
                     "InvoiceId": 493527,
-                    "InvoiceNumber": "ERS-5074",
+                    "InvoiceNumber": "ERS-50742-182312",
                     "Supplier": "Lee Enterprises",
                     "SupplierNumber": "1252",
                     "InvoiceAmount": 4500,
