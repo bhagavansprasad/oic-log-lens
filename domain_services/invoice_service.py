@@ -21,6 +21,8 @@ class InvoiceService:
         return self._map_invoice(items[0])
 
     def _map_invoice(self, fusion_invoice):
+        return fusion_invoice
+
         return {
             "invoiceId": fusion_invoice.get("InvoiceId"),
             "invoiceNumber": fusion_invoice.get("InvoiceNumber"),
