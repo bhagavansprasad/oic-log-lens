@@ -188,3 +188,84 @@ def insert_log(
     finally:
         cursor.close()
         conn.close()
+
+
+# ── SEARCH SQL ─────────────────────────────────────────────────────────────────
+
+SEARCH_SIMILAR_SQL = """
+SELECT
+    LOG_ID,
+    JIRA_ID,
+    FLOW_CODE,
+    TRIGGER_TYPE,
+    ERROR_CODE,
+    ERROR_SUMMARY,
+    VECTOR_DISTANCE(VECTOR, :query_vector, COSINE) AS SIMILARITY_SCORE
+FROM
+    OLL_LOGS
+ORDER BY
+    VECTOR_DISTANCE(VECTOR, :query_vector, COSINE)
+FETCH FIRST :top_n ROWS ONLY
+"""
+
+
+# ── SEARCH ─────────────────────────────────────────────────────────────────────
+
+def search_similar_logs(
+    query_embedding: list[float],
+    top_n: int = 5
+) -> list[dict]:
+    """
+    Searches OLL_LOGS for the most similar logs using vector cosine similarity.
+
+    Args:
+        query_embedding: Vector embedding of the query log (output of generate_embedding).
+        top_n:           Number of top similar results to return (default: 5).
+
+    Returns:
+        List of dicts, each containing:
+        - log_id
+        - jira_id
+        - flow_code
+        - trigger_type
+        - error_code
+        - error_summary
+        - similarity_score  (0.0 = identical, 1.0 = completely different — cosine distance)
+    """
+    query_vector = _to_vector_array(query_embedding)
+
+    logger.info(f"Searching OLL_LOGS for Top-{top_n} similar logs ...")
+
+    conn   = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(SEARCH_SIMILAR_SQL, {
+            "query_vector": query_vector,
+            "top_n":        top_n
+        })
+
+        columns = [col[0].lower() for col in cursor.description]
+        rows    = cursor.fetchall()
+
+        # Read all LOB/CLOB fields while connection is still open
+        results = []
+        for row in rows:
+            record = {}
+            for col, val in zip(columns, row):
+                if hasattr(val, "read"):
+                    record[col] = val.read()
+                else:
+                    record[col] = val
+            results.append(record)
+
+        logger.info(f"Search complete. {len(results)} results returned.")
+        return results
+
+    except Exception as e:
+        logger.error(f"Search failed: {e}")
+        raise
+
+    finally:
+        cursor.close()
+        conn.close()
