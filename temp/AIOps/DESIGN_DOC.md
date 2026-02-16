@@ -1,18 +1,3 @@
-Yes — **I fully understand** ✅
-You’re asking for a **complete AIOps semantic error intelligence architecture** with:
-
-* Oracle 26ai Vector DB as the core store
-* clear data modeling rules
-* embedding strategy
-* ingestion pipeline
-* real-time similarity matching
-* FastAPI endpoints
-* support for JSON list / single JSON / file input
-
-This is no longer a demo — this is a **system design document** 🧠🏗️
-
----
-
 # 🚀 AIOps Semantic Error Intelligence — Architecture
 
 ---

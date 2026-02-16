@@ -1,0 +1,171 @@
+@startuml Log Deduplication - Sequence Diagrams
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam sequenceMessageAlign center
+
+skinparam participant {
+    BackgroundColor #D6EAF8
+    BorderColor #2E86C1
+    FontStyle bold
+    FontColor #1A252F
+}
+
+skinparam actor {
+    BackgroundColor #FEF9E7
+    BorderColor #B7950B
+    FontStyle bold
+}
+
+skinparam sequence {
+    ArrowColor #2C3E50
+    ArrowFontColor #2C3E50
+    ArrowFontSize 12
+    LifeLineBorderColor #2E86C1
+    LifeLineBackgroundColor #EBF5FB
+    DividerBackgroundColor #D5D8DC
+    DividerFontStyle bold
+    DividerFontSize 14
+    GroupBackgroundColor #EAF4FB
+    GroupBorderColor #2E86C1
+    GroupFontStyle bold
+    NoteBackgroundColor #FFF9C4
+    NoteBorderColor #F9A825
+}
+
+' ============================================================
+'  PIPELINE 1 — DATA INGESTION
+' ============================================================
+
+title <b>Use Case 1 — Data Ingestion (Write Path)</b>
+
+actor       "User"      as USER
+participant "REST\n(FastAPI)" as REST
+participant "LLM\n(Gemini)"  as LLM
+database    "VectorDB\n(Oracle 26ai)" as VDB
+
+USER  -> REST : 1. Submit Raw Log (JSON)
+activate REST
+
+REST  -> LLM  : 2. Send Raw Log for Normalization
+activate LLM
+LLM  --> REST : 3. Return Normalized JSON Log
+deactivate LLM
+
+REST  -> LLM  : 4. Send Normalized Log for Embedding
+activate LLM
+LLM  --> REST : 5. Return Vector Embeddings
+deactivate LLM
+
+note right of REST
+  Now has:
+  • Original raw log
+  • Normalized log
+  • Embeddings
+end note
+
+REST  -> VDB  : 6. Store Raw Log + Normalized Log + Embeddings
+activate VDB
+VDB  --> REST : 7. Storage Success
+deactivate VDB
+
+REST --> USER : 8. Confirm Success
+deactivate REST
+@enduml
+
+
+@startuml Log Deduplication - Sequence Diagrams
+
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+skinparam sequenceMessageAlign center
+
+skinparam participant {
+    BackgroundColor #D6EAF8
+    BorderColor #2E86C1
+    FontStyle bold
+    FontColor #1A252F
+}
+
+skinparam actor {
+    BackgroundColor #FEF9E7
+    BorderColor #B7950B
+    FontStyle bold
+}
+
+skinparam sequence {
+    ArrowColor #2C3E50
+    ArrowFontColor #2C3E50
+    ArrowFontSize 12
+    LifeLineBorderColor #2E86C1
+    LifeLineBackgroundColor #EBF5FB
+    DividerBackgroundColor #D5D8DC
+    DividerFontStyle bold
+    DividerFontSize 14
+    GroupBackgroundColor #EAF4FB
+    GroupBorderColor #2E86C1
+    GroupFontStyle bold
+    NoteBackgroundColor #FFF9C4
+    NoteBorderColor #F9A825
+}
+
+
+' ============================================================
+'  PIPELINE 2 — SEARCH / DEDUPLICATION
+' ============================================================
+
+title <b>Use Case 2 — Search / Deduplication Check (Read Path)</b>
+
+actor       "User"      as USER
+participant "REST\n(FastAPI)" as REST
+participant "LLM\n(Gemini)"  as LLM
+database    "VectorDB\n(Oracle 26ai)" as VDB
+
+USER  -> REST : 1. Submit New Log (Search Request)
+activate REST
+
+REST  -> LLM  : 2. Send Raw Log for Normalization
+activate LLM
+LLM  --> REST : 3. Return Normalized JSON Log
+deactivate LLM
+
+REST  -> LLM  : 4. Send Normalized Log for Embedding
+activate LLM
+LLM  --> REST : 5. Return Vector Embeddings
+deactivate LLM
+
+REST  -> VDB  : 6. Vector Similarity Search (Top-N)
+activate VDB
+
+note right of VDB
+  Searches stored embeddings
+  and returns Top-N
+  most similar records
+end note
+
+VDB  --> REST : 7. Return Top-N Similar Logs
+deactivate VDB
+
+REST  -> LLM  : 8. Send Prompt + Normalized Log + Top-N Results
+activate LLM
+
+note right of LLM
+  LLM re-ranks results and
+  determines:
+  • Similarity score
+  • Best match
+  • Duplicate or not
+end note
+
+LLM  --> REST : 9. Return Similar Items + Similarity Scores + Jira IDs
+deactivate LLM
+
+REST --> USER : 10. Return Final Results\n(Jira IDs + Similarity Score + Match)
+deactivate REST
+
+@enduml
+

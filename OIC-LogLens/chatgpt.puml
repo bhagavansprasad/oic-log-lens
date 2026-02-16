@@ -1,0 +1,72 @@
+@startuml
+title AI-Powered Log Intelligence Platform - Overall Architecture
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+actor User
+
+rectangle "Client Layer" {
+  component "UI / API Client"
+}
+
+rectangle "Application Layer" {
+
+  component "FASTAPI REST Service" as API
+
+  component "Log Normalization\n(Gemini LLM)" as LLM_Normalize
+  component "Embedding Generation\n(Gemini LLM)" as LLM_Embed
+  component "Semantic Reasoning\n(Gemini LLM)" as LLM_Reason
+}
+
+rectangle "Data Layer" {
+  database "Oracle ATP 26ai\nVectorDB" as VDB
+}
+
+cloud "Jira System" as JIRA
+
+' -----------------------
+' Ingestion Flow
+' -----------------------
+
+User --> "UI / API Client"
+"UI / API Client" --> API : Submit Log
+
+API --> LLM_Normalize : Raw Log
+LLM_Normalize --> API : Normalized Log
+
+API --> LLM_Embed : Normalized Log
+LLM_Embed --> API : Embeddings
+
+API --> VDB : Store\n- Raw Log\n- Normalized Log\n- Embeddings\n- Metadata (Jira ID)
+
+VDB --> API : Store Confirmation
+API --> "UI / API Client" : Ingestion Success
+
+' -----------------------
+' Search Flow
+' -----------------------
+
+"UI / API Client" --> API : Search Log
+
+API --> LLM_Normalize : Raw Search Log
+LLM_Normalize --> API : Normalized Log
+
+API --> LLM_Embed : Generate Embeddings
+LLM_Embed --> API : Search Vector
+
+API --> VDB : Vector Similarity Search
+VDB --> API : Top N Similar Logs
+
+API --> LLM_Reason : New Log + Top N Results
+LLM_Reason --> API : Ranked Matches\nSimilarity Score
+
+API --> "UI / API Client" : Similar Issues\n+ Jira IDs
+
+' -----------------------
+' Optional Jira Sync
+' -----------------------
+
+API --> JIRA : Fetch / Update Jira Mapping
+
+@enduml

@@ -1,0 +1,118 @@
+@startuml AI-Powered Log Deduplication System
+
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Arial
+skinparam defaultFontSize 13
+
+skinparam rectangle {
+    BackgroundColor #EAF4FB
+    BorderColor #2E86C1
+    BorderThickness 2
+    FontStyle bold
+}
+
+skinparam database {
+    BackgroundColor #E9F7EF
+    BorderColor #1E8449
+    BorderThickness 2
+}
+
+skinparam actor {
+    BackgroundColor #FEF9E7
+    BorderColor #B7950B
+}
+
+skinparam arrow {
+    Color #2C3E50
+    FontSize 11
+    FontColor #2C3E50
+}
+
+skinparam note {
+    BackgroundColor #FFF9C4
+    BorderColor #F9A825
+}
+
+title <b>AI-Powered Log Deduplication System\nOverall Architecture</b>
+
+' ─── ACTORS & COMPONENTS ───────────────────────────────────────
+
+actor "User\n(UI)" as USER #FFF3CD
+
+rectangle "FastAPI\nREST Layer" as REST #D6EAF8
+
+rectangle "LLM\n(Gemini Models)" as LLM #F9EBEA {
+    rectangle "  Normalization  " as NORM #FADBD8
+    rectangle "Embedding\n  Generation  " as EMB  #FADBD8
+    rectangle "Semantic\nRe-ranking" as RERANK #FADBD8
+}
+
+database "Oracle 26ai\nVectorDB" as VECTDB #D5F5E3 {
+    rectangle "  Raw Log  " as RAW #A9DFBF
+    rectangle "Normalized\n    Log    " as NORMLOG #A9DFBF
+    rectangle "  Vector\nEmbeddings" as VECS #A9DFBF
+}
+
+' ─── PIPELINE 1 : DATA INGESTION ───────────────────────────────
+
+package "Pipeline 1 — Data Ingestion (Write Path)" #EBF5FB {
+
+    USER        -[#2E86C1]->>  REST    : 1. Submit Raw Log
+    REST        -[#2E86C1]->>  NORM    : 2. Send Log for Normalization
+    NORM        -[#E74C3C]-->  REST    : 3. Return Normalized JSON Log
+    REST        -[#2E86C1]->>  EMB     : 4. Send Normalized Log
+    EMB         -[#E74C3C]-->  REST    : 5. Return Embeddings
+    REST        -[#1E8449]->>  VECTDB  : 6. Store Raw + Normalized Log + Embeddings
+    VECTDB      -[#1E8449]-->  REST    : 7. Success
+    REST        -[#2E86C1]-->  USER    : 8. Confirm Success
+
+}
+
+' ─── PIPELINE 2 : SEARCH / DEDUPLICATION ───────────────────────
+
+package "Pipeline 2 — Search / Deduplication Check (Read Path)" #EAF7EE {
+
+    USER        -[#8E44AD]->>  REST    : 1. Submit New Log (Search)
+    REST        -[#8E44AD]->>  NORM    : 2. Normalize New Log
+    NORM        -[#E74C3C]-->  REST    : 3. Normalized JSON Log
+    REST        -[#8E44AD]->>  EMB     : 4. Generate Embeddings
+    EMB         -[#E74C3C]-->  REST    : 5. Return Embeddings
+    REST        -[#1E8449]->>  VECTDB  : 6. Vector Similarity Search (Top-N)
+    VECTDB      -[#1E8449]-->  REST    : 7. Top-N Similar Logs
+    REST        -[#8E44AD]->>  RERANK  : 8. Prompt + Normalized Log + Top-N Results
+    RERANK      -[#E74C3C]-->  REST    : 9. Similarity Score + Best Match + Jira IDs
+    REST        -[#8E44AD]-->  USER    : 10. Similar Results + Jira IDs + Score
+
+}
+
+' ─── NOTES ─────────────────────────────────────────────────────
+
+note right of VECTDB
+  Stores per log:
+  • Raw JSON log
+  • Normalized log
+  • Vector embeddings
+    (on critical fields only)
+  • Jira ID (metadata)
+end note
+
+note right of LLM
+  LLM Responsibilities:
+  1. Normalize heterogeneous logs
+     → consistent schema
+  2. Generate embeddings
+     → critical fields only
+  3. Re-rank & reason
+     → final similarity judgment
+end note
+
+note bottom of USER
+  Log file is always:
+  • Valid JSON
+  • List of JSON objects
+  • Variable structure
+    (keys differ per workflow)
+end note
+
+@enduml
