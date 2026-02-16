@@ -104,9 +104,10 @@ def print_results(results: list) -> None:
     for i, r in enumerate(results, start=1):
         # Cosine distance: 0.0 = identical, 1.0 = completely different
         # Convert to similarity percentage: 1 - distance
-        distance   = float(r.get("similarity_score") or 1.0)
+        raw = r.get("similarity_score")
+        distance = float(raw) if raw is not None else 1
         similarity = round((1 - distance) * 100, 2)
-
+        
         # Truncate error_summary for display
         summary = r.get("error_summary")
         summary = summary.read() if hasattr(summary, "read") else (summary or "")
