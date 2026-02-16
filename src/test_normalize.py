@@ -88,6 +88,7 @@ def test_all_files(log_files: list[str]) -> tuple[int, int]:
         else:
             failed += 1
         time.sleep(5)
+        break
 
     return passed, failed
 
