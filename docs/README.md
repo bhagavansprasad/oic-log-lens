@@ -202,7 +202,19 @@ docker exec -it oracle26ai_db_bhagavan sqlplus system/Abcd1234@FREEPDB1
 docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1
 SHOW USER;
 SELECT table_name FROM user_tables;
+SELECT * FROM OLL_LOGS;
+TRUNCATE TABLE OLL_LOGS;
+SELECT COUNT(*) FROM OLL_LOGS;
+
+
+8 rows selected.
 
 # Copy sql file to Docker container and create table
 docker cp oll_schema.sql oracle26ai_db_bhagavan:/tmp/oll_schema.sql
 docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/oll_schema.sql
+
+
+## TODO
+* Sequence flow diagram - Show the RAG
+* Masking value like siva email ID, what others
+* Table name is not appropriate 'OLL_LOGS'
