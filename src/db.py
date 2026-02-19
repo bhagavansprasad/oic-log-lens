@@ -243,6 +243,7 @@ SELECT
     TRIGGER_TYPE,
     ERROR_CODE,
     ERROR_SUMMARY,
+    NORMALIZED_JSON,
     VECTOR_DISTANCE(VECTOR, :query_vector, COSINE) AS SIMILARITY_SCORE
 FROM
     OLL_LOGS
@@ -273,6 +274,7 @@ def search_similar_logs(
         - trigger_type
         - error_code
         - error_summary
+        - normalized_json  (full normalized log as JSON string)
         - similarity_score  (0.0 = identical, 1.0 = completely different — cosine distance)
     """
     query_vector = _to_vector_array(query_embedding)
@@ -300,6 +302,14 @@ def search_similar_logs(
                     record[col] = val.read()
                 else:
                     record[col] = val
+            
+            # Parse NORMALIZED_JSON if present
+            if 'normalized_json' in record and record['normalized_json']:
+                try:
+                    record['normalized_json'] = json.loads(record['normalized_json'])
+                except:
+                    record['normalized_json'] = {}
+            
             results.append(record)
 
         logger.info(f"Search complete. {len(results)} results returned.")

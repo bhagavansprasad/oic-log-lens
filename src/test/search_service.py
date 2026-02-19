@@ -35,8 +35,8 @@ def rerank_with_llm(normalized_log: Dict[str, Any], candidates: List[Dict[str, A
     logger.info(f"Re-ranking {len(candidates)} candidates with LLM...")
     
     try:
-        # Get re-ranking prompt with schema
-        system_prompt, user_prompt, response_schema = get_rerank_prompt(normalized_log, candidates)
+        # Get re-ranking prompt
+        system_prompt, user_prompt = get_rerank_prompt(normalized_log, candidates)
         
         logger.info("=" * 80)
         logger.info("RE-RANKING PROMPT:")
@@ -44,37 +44,28 @@ def rerank_with_llm(normalized_log: Dict[str, Any], candidates: List[Dict[str, A
         logger.info(f"User prompt (first 1000 chars): {user_prompt[:1000]}")
         logger.info("=" * 80)
         
-        # Call Gemini with structured output
-        logger.info("Calling Gemini for re-ranking with structured output...")
+        # Call Gemini
+        logger.info("Calling Gemini for re-ranking...")
         response = client.models.generate_content(
             model=GENERATION_MODEL,
             contents=[system_prompt, user_prompt],
-            config={
-                "response_mime_type": "application/json",
-                "response_schema": response_schema
-            }
+            config={"response_mime_type": "application/json"}
         )
         
-        # Parse structured response
+        # Parse response
         reranked_text = response.text.strip()
         logger.info(f"LLM re-ranking raw response (first 500 chars): {reranked_text[:500]}")
         
-        response_data = json.loads(reranked_text)
-        reranked_results = response_data.get("results", [])
-        logger.info(f"Parsed {len(reranked_results)} re-ranked results from structured output")
+        # Clean JSON if wrapped in markdown
+        if reranked_text.startswith("```"):
+            reranked_text = reranked_text.split("```json")[-1].split("```")[0].strip()
+        
+        reranked_results = json.loads(reranked_text)
+        logger.info(f"Parsed {len(reranked_results)} re-ranked results")
         
         # Merge re-ranking data with original candidates
-        # Create lookup by both full URL and short ticket ID
-        jira_to_candidate = {}
-        for c in candidates:
-            full_url = c.get("jira_id")
-            jira_to_candidate[full_url] = c
-            # Also map short ID (e.g., OLL-3C5C205C)
-            if full_url:
-                short_id = full_url.split("/")[-1]
-                jira_to_candidate[short_id] = c
-        
-        logger.info(f"Merging results. Candidates: {[c.get('jira_id') for c in candidates]}")
+        jira_to_candidate = {c.get("jira_id"): c for c in candidates}
+        logger.info(f"Merging results. Candidates: {list(jira_to_candidate.keys())}")
         
         enhanced_results = []
         for result in reranked_results:
@@ -167,8 +158,7 @@ def search_log(raw_log: List[Dict[str, Any]], top_n: int = 5) -> List[Dict[str, 
                 "flow_code": result.get("flow_code"),
                 "trigger_type": result.get("trigger_type"),
                 "error_code": result.get("error_code"),
-                "error_summary": error_summary_short,
-                "normalized_json": result.get("normalized_json", {})  # Add for re-ranking
+                "error_summary": error_summary_short
             })
         
         # ── Step 5: LLM Re-ranking ─────────────────────────────────────────────
