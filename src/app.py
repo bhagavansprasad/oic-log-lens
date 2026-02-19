@@ -332,14 +332,54 @@ elif page == "🔍 Search Duplicates":
     st.header("🔍 Search for Duplicate Logs")
     st.markdown("Find similar logs using semantic similarity search.")
     
-    log_content = st.text_area(
-        "Paste Log Content (JSON Array)",
-        value='[{"flowId": "test", "errorMessage": "sample error"}]',
-        height=300,
-        help="Paste the log you want to search for"
-    )
+    # Add tabs for file upload vs text input
+    search_tab1, search_tab2 = st.tabs(["📤 Upload File", "📝 Paste Text"])
     
-    if st.button("🔍 Search Similar Logs", type="primary"):
+    # Use session state to track which tab's content to use
+    if 'search_method' not in st.session_state:
+        st.session_state.search_method = 'text'
+    
+    uploaded_content = None
+    text_content = None
+    
+    with search_tab1:
+        st.markdown("Upload a log file to search for similar logs.")
+        uploaded_search_file = st.file_uploader(
+            "Choose a JSON log file",
+            type=["json"],
+            help="Select a JSON log file to search",
+            key="search_upload"
+        )
+        
+        if uploaded_search_file is not None:
+            st.session_state.search_method = 'upload'
+            # Preview
+            with st.expander("📄 Preview File Content"):
+                file_content = uploaded_search_file.read().decode("utf-8")
+                st.code(file_content[:500] + ("..." if len(file_content) > 500 else ""), language="json")
+                uploaded_search_file.seek(0)
+            
+            uploaded_content = uploaded_search_file.read().decode("utf-8")
+    
+    with search_tab2:
+        st.markdown("Paste the raw log content as JSON.")
+        text_content = st.text_area(
+            "Log Content (JSON Array)",
+            value='[{"flowId": "test", "errorMessage": "sample error"}]',
+            height=300,
+            help="Paste the log you want to search for",
+            key="search_text"
+        )
+        if text_content and text_content != '[{"flowId": "test", "errorMessage": "sample error"}]':
+            st.session_state.search_method = 'text'
+    
+    # Use the correct content based on which tab was used
+    if st.session_state.search_method == 'upload' and uploaded_content:
+        log_content = uploaded_content
+    else:
+        log_content = text_content
+    
+    if st.button("🔍 Search Similar Logs", type="primary") and log_content:
         with st.spinner("Searching for similar logs..."):
             try:
                 response = requests.post(
@@ -357,14 +397,46 @@ elif page == "🔍 Search Duplicates":
                         st.markdown("### 📊 Search Results")
                         
                         for i, match in enumerate(data["matches"], 1):
-                            with st.expander(f"**Rank {i} — {match['similarity_score']}% Match**", expanded=(i==1)):
-                                col1, col2, col3 = st.columns(3)
+                            # Determine badge color based on classification
+                            classification = match.get('classification', 'UNKNOWN')
+                            if classification == 'EXACT_DUPLICATE':
+                                badge_color = "🟢"
+                                badge_text = "EXACT DUPLICATE"
+                            elif classification == 'SIMILAR_ROOT_CAUSE':
+                                badge_color = "🟡"
+                                badge_text = "SIMILAR ROOT CAUSE"
+                            elif classification == 'RELATED':
+                                badge_color = "🟠"
+                                badge_text = "RELATED"
+                            else:
+                                badge_color = "⚪"
+                                badge_text = "NOT RELATED"
+                            
+                            # New format: CLASSIFICATION - LLM's confidence X% (Vector: Y%) - JIRA_ID
+                            confidence = match.get('confidence', 'N/A')
+                            if confidence != 'N/A':
+                                confidence_str = f"LLM's confidence {confidence}%"
+                            else:
+                                confidence_str = "No confidence score"
+                            
+                            jira_short = match['jira_id'].split('/')[-1]
+                            jira_url = match['jira_id']
+                            title = f"**Rank {match.get('rank', i)} — {badge_text} - {confidence_str} (Vector: {match['similarity_score']}%) - [{jira_short}]({jira_url})**"
+                            
+                            with st.expander(title, expanded=(i==1)):
+                                # Classification banner
+                                if match.get('reasoning'):
+                                    st.info(f"**💡 Why this match:** {match['reasoning']}")
+                                
+                                col1, col2, col3, col4 = st.columns(4)
                                 
                                 with col1:
                                     st.metric("Similarity", f"{match['similarity_score']}%")
                                 with col2:
-                                    st.metric("Flow Code", match['flow_code'])
+                                    st.metric("Confidence", f"{match.get('confidence', 'N/A')}")
                                 with col3:
+                                    st.metric("Flow Code", match['flow_code'])
+                                with col4:
                                     st.metric("Error Code", match['error_code'] or "N/A")
                                 
                                 st.markdown(f"**Jira ID:** [{match['jira_id']}]({match['jira_id']})")

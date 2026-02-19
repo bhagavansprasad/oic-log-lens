@@ -81,6 +81,10 @@ class SearchMatch(BaseModel):
     trigger_type: Optional[str] = Field(None, description="Trigger type (rest/soap/scheduled)")
     error_code: Optional[str] = Field(None, description="Error code")
     error_summary: str = Field(..., description="Error summary (first 150 chars)")
+    rank: Optional[int] = Field(None, description="LLM re-ranking position")
+    classification: Optional[str] = Field(None, description="EXACT_DUPLICATE | SIMILAR_ROOT_CAUSE | RELATED | NOT_RELATED")
+    confidence: Optional[int] = Field(None, description="LLM confidence score (0-100)")
+    reasoning: Optional[str] = Field(None, description="LLM explanation of classification")
 
 
 class SearchResponse(BaseModel):

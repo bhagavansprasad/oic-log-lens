@@ -135,6 +135,7 @@ EMBEDDING_NESTED_FIELDS = [
     ("error", "message_parsed", "error_description"),
 ]
 
+
 def get_embedding_text(normalized_log: dict) -> str:
     """
     Builds a single concatenated text string from selected fields
@@ -167,3 +168,159 @@ def get_embedding_text(normalized_log: dict) -> str:
             parts.append(str(val))
 
     return " ".join(parts)
+
+
+# ── RE-RANKING PROMPT ──────────────────────────────────────────────────────────
+
+RERANK_SYSTEM_PROMPT = """You are an expert at analyzing Oracle Integration Cloud (OIC) error logs and determining if errors are duplicates or related issues.
+
+Your task is to analyze a query log and a list of candidate similar logs, then classify each candidate and provide reasoning.
+
+Classification categories:
+- EXACT_DUPLICATE (90-100% match): Same root cause, same error, same fix applicable
+- SIMILAR_ROOT_CAUSE (70-89% match): Same underlying issue, solution likely transferable
+- RELATED (50-69% match): Some overlap, may provide useful context
+- NOT_RELATED (0-49% match): Different issues, not helpful
+
+Focus on:
+1. Root cause analysis (not just error codes)
+2. Error patterns and chains
+3. Business context (workflow, endpoint, integration)
+4. Whether the same fix would apply
+
+Return your analysis as JSON only, no markdown, no preamble."""
+
+RERANK_USER_PROMPT = """Query Log (New Error):
+{query_log}
+
+Candidate Similar Logs:
+{candidates}
+
+Analyze each candidate and return as a JSON object with this structure:
+{{
+  "results": [
+    {{
+      "jira_id": "OLL-XXX",
+      "rank": 1,
+      "classification": "EXACT_DUPLICATE",
+      "confidence": 95,
+      "reasoning": "Brief explanation why"
+    }}
+  ]
+}}
+
+Order by rank (1 = best match). Include all candidates.
+Classification must be one of: EXACT_DUPLICATE, SIMILAR_ROOT_CAUSE, RELATED, NOT_RELATED"""
+
+
+# ── RE-RANKING RESPONSE SCHEMA ─────────────────────────────────────────────────
+
+RERANK_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "jira_id": {
+                        "type": "string",
+                        "description": "Jira ticket ID (e.g., OLL-4FF0674A)"
+                    },
+                    "rank": {
+                        "type": "integer",
+                        "description": "Ranking position (1 = best match)",
+                        "minimum": 1
+                    },
+                    "classification": {
+                        "type": "string",
+                        "enum": ["EXACT_DUPLICATE", "SIMILAR_ROOT_CAUSE", "RELATED", "NOT_RELATED"],
+                        "description": "Classification category"
+                    },
+                    "confidence": {
+                        "type": "integer",
+                        "description": "Confidence score 0-100",
+                        "minimum": 0,
+                        "maximum": 100
+                    },
+                    "reasoning": {
+                        "type": "string",
+                        "description": "Brief explanation of classification"
+                    }
+                },
+                "required": ["jira_id", "rank", "classification", "confidence", "reasoning"]
+            }
+        }
+    },
+    "required": ["results"]
+}
+
+
+def get_rerank_prompt(query_log: dict, candidates: list) -> tuple[str, str, dict]:
+    """
+    Build the LLM re-ranking prompt with structured output schema.
+    
+    Args:
+        query_log: Normalized query log
+        candidates: List of candidate logs from vector search
+        
+    Returns:
+        Tuple of (system_prompt, user_prompt, response_schema)
+    """
+    # Format query log - only key fields
+    query_summary = f"""
+Flow: {query_log.get('flow', {}).get('code', 'N/A')}
+Trigger: {query_log.get('flow', {}).get('trigger_type', 'N/A')}
+Error Code: {query_log.get('error', {}).get('code', 'N/A')}
+Error Summary: {query_log.get('error', {}).get('summary', 'N/A')[:200]}
+Root Cause: {query_log.get('error', {}).get('message_parsed', {}).get('root_cause', 'N/A')}
+"""
+    
+    # Format candidates with full normalized data
+    import json
+    from config import logger
+    candidates_text = ""
+    for i, candidate in enumerate(candidates, 1):
+        norm_data = candidate.get('normalized_json', {})
+        
+        logger.info(f"Candidate {i}: norm_data type = {type(norm_data)}")
+        
+        # If still a string, parse it
+        if isinstance(norm_data, str):
+            try:
+                norm_data = json.loads(norm_data)
+                logger.info(f"Candidate {i}: Successfully parsed JSON string")
+            except Exception as e:
+                logger.warning(f"Candidate {i}: Failed to parse JSON: {e}")
+                norm_data = {}
+        
+        flow_info = norm_data.get('flow', {})
+        error_info = norm_data.get('error', {})
+        
+        logger.info(f"Candidate {i}: norm_data keys = {list(norm_data.keys())}")
+        logger.info(f"Candidate {i}: error_info keys = {list(error_info.keys())}")
+        
+        message_parsed = error_info.get('message_parsed', {})
+        logger.info(f"Candidate {i}: message_parsed = {message_parsed}")
+        
+        root_cause = message_parsed.get('root_cause', 'N/A')
+        logger.info(f"Candidate {i}: root_cause = {root_cause}")
+        
+        candidates_text += f"""
+Candidate {i}:
+  Jira ID: {candidate.get('jira_id', 'N/A')}
+  Similarity: {candidate.get('similarity_score', 0)}%
+  Flow: {flow_info.get('code', candidate.get('flow_code', 'N/A'))}
+  Trigger: {flow_info.get('trigger_type', candidate.get('trigger_type', 'N/A'))}
+  Error Code: {error_info.get('code', candidate.get('error_code', 'N/A'))}
+  Error Summary: {error_info.get('summary', candidate.get('error_summary', 'N/A'))[:200]}
+  Root Cause: {error_info.get('message_parsed', {}).get('root_cause', 'N/A')}
+
+"""
+    
+    user_prompt = RERANK_USER_PROMPT.format(
+        query_log=query_summary.strip(),
+        candidates=candidates_text.strip()
+    )
+    
+    return RERANK_SYSTEM_PROMPT, user_prompt, RERANK_RESPONSE_SCHEMA
