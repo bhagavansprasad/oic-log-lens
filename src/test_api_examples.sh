@@ -79,3 +79,47 @@ done
 # Open browser: http://localhost:8000/docs
 # FastAPI auto-generates interactive Swagger UI
 # You can test all endpoints directly from the browser
+
+
+
+# ============================================================
+# SEARCH FOR DUPLICATES
+# ============================================================
+# Use the Python test script instead:
+# python test_search_api.py
+
+
+# ============================================================
+# INGEST FROM URL
+# ============================================================
+
+curl -X POST http://localhost:8000/ingest/url \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://storage.googleapis.com/promptlyai-public-bucket/oci_logs/01_flow-log.json"
+  }'
+
+# ============================================================
+# INGEST FROM RAW TEXT
+# ============================================================
+
+echo "=== Ingest from raw text ==="
+LOG_CONTENT=$(cat flow-logs/03_flow-log.json)
+curl -X POST http://localhost:8000/ingest/raw \
+  -H "Content-Type: application/json" \
+  -d "{\"log_content\": \"$(echo $LOG_CONTENT | sed 's/"/\\"/g' | tr -d '\n')\"}"
+echo -e "\n"
+
+
+# ============================================================
+# INGEST FROM DATABASE
+# ============================================================
+
+echo "=== Ingest from database ==="
+curl -X POST http://localhost:8000/ingest/database \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connection_string": "oracle://user:pass@host:1521/service",
+    "query": "SELECT log_json FROM oic_logs WHERE log_id = 123"
+  }'
+echo -e "\n"

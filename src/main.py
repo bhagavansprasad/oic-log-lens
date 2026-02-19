@@ -8,8 +8,22 @@ Provides endpoints for log ingestion and deduplication search.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from models import IngestFileRequest, IngestResponse, SearchRequest, SearchResponse
-from ingestion_service import load_from_file, load_from_raw_text, ingest_log
+from models import (
+    IngestFileRequest,
+    IngestURLRequest,
+    IngestRawRequest, 
+    IngestDatabaseRequest,
+    IngestResponse,
+    SearchRequest,
+    SearchResponse,
+    )
+from ingestion_service import (
+    load_from_file,
+    load_from_url,
+    load_from_raw_text,
+    load_from_database,
+    ingest_log,
+    )
 from search_service import search_log
 from config import logger
 
@@ -75,6 +89,87 @@ def ingest_file(request: IngestFileRequest):
         message="Log ingested successfully"
     )
 
+
+
+@app.post(
+    "/ingest/url",
+    response_model=IngestResponse,
+    tags=["Ingestion"],
+    summary="Ingest log from URL"
+)
+def ingest_url(request: IngestURLRequest):
+    """
+    Ingest an OIC log from a URL.
+    
+    Fetches the log file from the provided HTTP/HTTPS URL,
+    then runs the standard ingestion pipeline.
+    """
+    # Load raw log from URL
+    raw_log = load_from_url(request.url)
+    
+    # Run ingestion pipeline
+    log_id, jira_id = ingest_log(raw_log)
+    
+    return IngestResponse(
+        log_id=log_id,
+        jira_id=jira_id,
+        status="success",
+        message="Log ingested successfully"
+    )
+
+
+@app.post(
+    "/ingest/raw",
+    response_model=IngestResponse,
+    tags=["Ingestion"],
+    summary="Ingest log from raw text"
+)
+def ingest_raw(request: IngestRawRequest):
+    """
+    Ingest an OIC log from raw JSON text.
+    
+    Accepts the log content as a JSON string,
+    then runs the standard ingestion pipeline.
+    """
+    # Load raw log from text
+    raw_log = load_from_raw_text(request.log_content)
+    
+    # Run ingestion pipeline
+    log_id, jira_id = ingest_log(raw_log)
+    
+    return IngestResponse(
+        log_id=log_id,
+        jira_id=jira_id,
+        status="success",
+        message="Log ingested successfully"
+    )
+
+
+@app.post(
+    "/ingest/database",
+    response_model=IngestResponse,
+    tags=["Ingestion"],
+    summary="Ingest log from database"
+)
+def ingest_database(request: IngestDatabaseRequest):
+    """
+    Ingest an OIC log from a database query.
+    
+    Connects to the database, executes the query,
+    then runs the standard ingestion pipeline.
+    """
+    # Load raw log from database
+    raw_log = load_from_database(request.connection_string, request.query)
+    
+    # Run ingestion pipeline
+    log_id, jira_id = ingest_log(raw_log)
+    
+    return IngestResponse(
+        log_id=log_id,
+        jira_id=jira_id,
+        status="success",
+        message="Log ingested successfully"
+    )
 
 
 # ── Search Endpoint ────────────────────────────────────────────────────────────

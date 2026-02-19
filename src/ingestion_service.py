@@ -82,15 +82,49 @@ def load_from_url(url: str) -> List[Dict[str, Any]]:
     Raises:
         HTTPException: If URL unreachable or invalid JSON
     """
-    # TODO: Implement URL fetching
-    # import requests
-    # response = requests.get(url, timeout=30)
-    # response.raise_for_status()
-    # raw_log = response.json()
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="URL ingestion not yet implemented"
-    )
+    import requests
+    
+    logger.info(f"Fetching log from URL: {url}")
+    
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+    except requests.exceptions.Timeout:
+        logger.error(f"URL request timed out: {url}")
+        raise HTTPException(
+            status_code=status.HTTP_408_REQUEST_TIMEOUT,
+            detail=f"Request timed out: {url}"
+        )
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Connection error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Could not connect to URL: {url}"
+        )
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"HTTP error: {e}")
+        raise HTTPException(
+            status_code=response.status_code,
+            detail=f"HTTP {response.status_code}: {url}"
+        )
+    
+    try:
+        raw_log = response.json()
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON from URL: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON from URL: {str(e)}"
+        )
+    
+    if not isinstance(raw_log, list):
+        logger.error("Log from URL must be a JSON array")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Log from URL must be a JSON array"
+        )
+    
+    return raw_log
 
 
 def load_from_raw_text(log_content: str) -> List[Dict[str, Any]]:
@@ -141,17 +175,67 @@ def load_from_database(connection_string: str, query: str) -> List[Dict[str, Any
     Raises:
         HTTPException: If connection fails or invalid result
     """
-    # TODO: Implement database loading
-    # import oracledb
-    # conn = oracledb.connect(connection_string)
-    # cursor = conn.cursor()
-    # cursor.execute(query)
-    # result = cursor.fetchone()
-    # raw_log = json.loads(result[0])
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Database ingestion not yet implemented"
-    )
+    import oracledb
+    
+    logger.info(f"Connecting to database...")
+    
+    try:
+        conn = oracledb.connect(connection_string)
+        cursor = conn.cursor()
+    except Exception as e:
+        logger.error(f"Database connection failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database connection failed: {str(e)}"
+        )
+    
+    try:
+        logger.info(f"Executing query: {query[:100]}...")
+        cursor.execute(query)
+        result = cursor.fetchone()
+        
+        if not result:
+            logger.error("Query returned no results")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Query returned no results"
+            )
+        
+        # Assume first column contains JSON
+        log_json = result[0]
+        
+        # Handle CLOB
+        if hasattr(log_json, "read"):
+            log_json = log_json.read()
+        
+        raw_log = json.loads(log_json)
+        
+        if not isinstance(raw_log, list):
+            logger.error("Query result must be a JSON array")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Query result must be a JSON array"
+            )
+        
+        return raw_log
+    
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON from database: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid JSON from database: {str(e)}"
+        )
+    
+    except Exception as e:
+        logger.error(f"Database query failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database query failed: {str(e)}"
+        )
+    
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # ── CORE INGESTION PIPELINE ────────────────────────────────────────────────────
