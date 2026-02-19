@@ -106,3 +106,42 @@ class SearchResponse(BaseModel):
                 ]
             }
         }
+
+
+
+class IngestURLRequest(BaseModel):
+    """Request model for POST /ingest/url"""
+    url: str = Field(..., description="HTTP/HTTPS URL pointing to a log file")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "url": "https://example.com/logs/error.json"
+            }
+        }
+
+
+class IngestRawRequest(BaseModel):
+    """Request model for POST /ingest/raw"""
+    log_content: str = Field(..., description="Raw log as JSON string (array format)")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "log_content": "[{...raw log json array...}]"
+            }
+        }
+
+
+class IngestDatabaseRequest(BaseModel):
+    """Request model for POST /ingest/database"""
+    connection_string: str = Field(..., description="Database connection string")
+    query: str = Field(..., description="SQL query to fetch the log")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "connection_string": "oracle://user:pass@host:port/service",
+                "query": "SELECT log_json FROM logs WHERE id = 123"
+            }
+        }
