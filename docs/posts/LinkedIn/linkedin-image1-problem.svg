@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1200" height="630" viewBox="0 0 1200 630">
+<defs>
+</defs>
+<rect x="0" y="0" width="1200" height="630" fill="#0A1929" />
+<text x="600.0" y="80" font-size="20" fill="#64B5F6" text-anchor="middle" font-family="Arial" font-weight="bold">THE PROBLEM</text>
+<text x="600.0" y="130" font-size="32" fill="#FFFFFF" text-anchor="middle" font-family="Arial" font-weight="bold">Manual Error Resolution in Oracle Integration Cloud</text>
+<circle cx="240" cy="230" r="50" fill="#FF6B6B" fill-opacity="0.2" stroke="#FF6B6B" stroke-width="2" />
+<text x="240" y="310" font-size="18" fill="#FF6B6B" text-anchor="middle" font-family="Arial" font-weight="bold">Repeated Errors</text>
+<circle cx="600" cy="230" r="50" fill="#FF6B6B" fill-opacity="0.2" stroke="#FF6B6B" stroke-width="2" />
+<text x="600" y="310" font-size="18" fill="#FF6B6B" text-anchor="middle" font-family="Arial" font-weight="bold">Manual Investigation</text>
+<circle cx="960" cy="230" r="50" fill="#FF6B6B" fill-opacity="0.2" stroke="#FF6B6B" stroke-width="2" />
+<text x="960" y="310" font-size="18" fill="#FF6B6B" text-anchor="middle" font-family="Arial" font-weight="bold">Lost Knowledge</text>
+<circle cx="150" cy="345" r="4" fill="#FF6B6B" />
+<text x="180" y="352" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">Similar payload failures</text>
+<circle cx="150" cy="385" r="4" fill="#FF6B6B" />
+<text x="180" y="392" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">XSLT transformation errors</text>
+<circle cx="150" cy="425" r="4" fill="#FF6B6B" />
+<text x="180" y="432" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">API 400/500 issues</text>
+<circle cx="510" cy="345" r="4" fill="#FF6B6B" />
+<text x="540" y="352" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">Manual log review</text>
+<circle cx="510" cy="385" r="4" fill="#FF6B6B" />
+<text x="540" y="392" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">Searching old tickets</text>
+<circle cx="510" cy="425" r="4" fill="#FF6B6B" />
+<text x="540" y="432" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">Dependency on SMEs</text>
+<circle cx="870" cy="345" r="4" fill="#FF6B6B" />
+<text x="900" y="352" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">Reinvestigating solved issues</text>
+<circle cx="870" cy="385" r="4" fill="#FF6B6B" />
+<text x="900" y="392" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">Knowledge in silos</text>
+<circle cx="870" cy="425" r="4" fill="#FF6B6B" />
+<text x="900" y="432" font-size="14" fill="#B0BEC5" text-anchor="start" font-family="Arial" font-weight="normal">Increased MTTR</text>
+<rect x="100" y="520" width="1000" height="80" fill="#D32F2F" fill-opacity="0.15" stroke="#D32F2F" stroke-width="2" rx="8" />
+<text x="600.0" y="550" font-size="14" fill="#FF6B6B" text-anchor="middle" font-family="Arial" font-weight="bold">IMPACT</text>
+<text x="600.0" y="580" font-size="18" fill="#FFCDD2" text-anchor="middle" font-family="Arial" font-weight="bold">Wasted Effort  •  Slow Resolution  •  Extended Downtime</text>
+</svg>
