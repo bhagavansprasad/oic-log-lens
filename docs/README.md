@@ -326,8 +326,11 @@ SELECT COUNT(*) FROM OLL_LOGS;
 TRUNCATE TABLE OLL_LOGS;
 
 # Copy SQL file to container
-docker cp oll_schema.sql oracle26ai_db_bhagavan:/tmp/oll_schema.sql
-docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/oll_schema.sql
+docker cp oic_kb_schema.sql oracle26ai_db_bhagavan:/tmp/oic_kb_schema.sql
+docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/oic_kb_schema.sql
+
+docker cp kg_schema.sql oracle26ai_db_bhagavan:/tmp/kg_schema.sql
+docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/kg_schema.sql
 ```
 
 ### 3. Python Dependencies

@@ -1,29 +1,43 @@
 -- ============================================================
--- OIC-LogLens — Oracle 26ai Schema
--- Prefix  : OLL (OIC Log Lens)
--- User    : EA_APP | DB: FREEPDB1
--- Version : 1.0
+-- OIC-LogLens — Vector Table Schema
+-- File     : oll_schema.sql
+-- Table    : OIC_KB_ISSUE  (renamed from OLL_LOGS)
+-- User     : EA_APP | DB: FREEPDB1
+-- Version  : 1.1
 -- ============================================================
+-- NAMING CONVENTION (consistent across entire project):
+--   OIC_KB_             → prefix for all OIC Knowledge Base objects
+--   OIC_KB_ISSUE        → this file — vector table for ingested logs
+--   OIC_KB_GRAPH_NODES  → knowledge graph nodes  (see kg_schema.sql)
+--   OIC_KB_GRAPH_EDGES  → knowledge graph edges  (see kg_schema.sql)
+--   OIC_KB_GRAPH        → property graph view    (see kg_schema.sql)
+--
+-- RUN ORDER:
+--   1. oll_schema.sql   ← this file
+--   2. kg_schema.sql    ← knowledge graph
+-- ============================================================
+
 
 -- ── Drop existing objects safely ─────────────────────────────
 
 BEGIN
-    EXECUTE IMMEDIATE 'DROP INDEX OLL_LOGS_VIDX';
+    EXECUTE IMMEDIATE 'DROP INDEX OIC_KB_ISSUE_VIDX';
 EXCEPTION
     WHEN OTHERS THEN NULL;
 END;
 /
 
 BEGIN
-    EXECUTE IMMEDIATE 'DROP TABLE OLL_LOGS';
+    EXECUTE IMMEDIATE 'DROP TABLE OIC_KB_ISSUE';
 EXCEPTION
     WHEN OTHERS THEN NULL;
 END;
 /
 
+
 -- ── Main Table ───────────────────────────────────────────────
 
-CREATE TABLE OLL_LOGS (
+CREATE TABLE OIC_KB_ISSUE (
     LOG_ID            VARCHAR2(100)    PRIMARY KEY,
     LOG_HASH          VARCHAR2(64)     NOT NULL,
     JIRA_ID           VARCHAR2(100),
@@ -40,81 +54,85 @@ CREATE TABLE OLL_LOGS (
     VECTOR            VECTOR(3072, FLOAT32)
 );
 
-ALTER TABLE OLL_LOGS ADD CONSTRAINT OLL_LOGS_HASH_UQ UNIQUE (LOG_HASH);
+ALTER TABLE OIC_KB_ISSUE ADD CONSTRAINT OIC_KB_ISSUE_HASH_UQ UNIQUE (LOG_HASH);
+
 
 -- ── Column Comments ───────────────────────────────────────────
 
-COMMENT ON TABLE OLL_LOGS IS
-    'OIC-LogLens: Stores ingested OIC flow logs with normalized metadata, raw content, and vector embeddings for semantic deduplication.';
+COMMENT ON TABLE OIC_KB_ISSUE IS
+    'OIC Knowledge Base: Stores ingested OIC flow logs with normalized metadata, raw content, and vector embeddings for semantic deduplication.';
 
-COMMENT ON COLUMN OLL_LOGS.LOG_ID IS
+COMMENT ON COLUMN OIC_KB_ISSUE.LOG_ID IS
     'Primary key. UUID generated at insert time. Uniquely identifies each ingested log record.';
 
--- Add with other comments:
-COMMENT ON COLUMN OLL_LOGS.LOG_HASH IS
+COMMENT ON COLUMN OIC_KB_ISSUE.LOG_HASH IS
     'SHA256 hash of the raw log JSON. Used to prevent duplicate log ingestion. Same raw log will always produce the same hash.';
 
-COMMENT ON COLUMN OLL_LOGS.JIRA_ID IS
+COMMENT ON COLUMN OIC_KB_ISSUE.JIRA_ID IS
     'Associated Jira issue ID for this log. Used as the deduplication reference returned during similarity search.';
 
-COMMENT ON COLUMN OLL_LOGS.LOG_TYPE IS
+COMMENT ON COLUMN OIC_KB_ISSUE.LOG_TYPE IS
     'Classification of the log. Values: error | informational. Populated from normalized_json.log_type.';
 
-COMMENT ON COLUMN OLL_LOGS.EVENT_TIME IS
+COMMENT ON COLUMN OIC_KB_ISSUE.EVENT_TIME IS
     'Timestamp of the flow execution event. Populated from normalized_json.flow.timestamp (converted from epoch ms).';
 
-COMMENT ON COLUMN OLL_LOGS.FLOW_CODE IS
+COMMENT ON COLUMN OIC_KB_ISSUE.FLOW_CODE IS
     'OIC integration flow code that generated this log. Populated from normalized_json.flow.code.';
 
-COMMENT ON COLUMN OLL_LOGS.TRIGGER_TYPE IS
+COMMENT ON COLUMN OIC_KB_ISSUE.TRIGGER_TYPE IS
     'How the flow was triggered. Values: rest | soap | scheduled. Populated from normalized_json.flow.trigger_type.';
 
-COMMENT ON COLUMN OLL_LOGS.ENDPOINT_NAME IS
+COMMENT ON COLUMN OIC_KB_ISSUE.ENDPOINT_NAME IS
     'Name of the endpoint where the error occurred. Populated from normalized_json.error.endpoint_name.';
 
-COMMENT ON COLUMN OLL_LOGS.ERROR_CODE IS
+COMMENT ON COLUMN OIC_KB_ISSUE.ERROR_CODE IS
     'Short error code from the log. Examples: Execution failed, 401, 404, 503. Populated from normalized_json.error.code.';
 
-COMMENT ON COLUMN OLL_LOGS.ERROR_SUMMARY IS
+COMMENT ON COLUMN OIC_KB_ISSUE.ERROR_SUMMARY IS
     'One-line human readable error summary. Populated from normalized_json.error.summary.';
 
-COMMENT ON COLUMN OLL_LOGS.SEMANTIC_TEXT IS
+COMMENT ON COLUMN OIC_KB_ISSUE.SEMANTIC_TEXT IS
     'Concatenated text string built from key normalized fields. This is the input used to generate the vector embedding.';
 
-COMMENT ON COLUMN OLL_LOGS.RAW_JSON IS
+COMMENT ON COLUMN OIC_KB_ISSUE.RAW_JSON IS
     'Original raw OIC log file content as-is. Stored for traceability and reprocessing.';
 
-COMMENT ON COLUMN OLL_LOGS.NORMALIZED_JSON IS
+COMMENT ON COLUMN OIC_KB_ISSUE.NORMALIZED_JSON IS
     'Full normalized log JSON produced by the LLM normalization pipeline. Stored for audit and future use.';
 
-COMMENT ON COLUMN OLL_LOGS.VECTOR IS
-    'Vector embedding (3072 dimensions, FLOAT32) generated from SEMANTIC_TEXT using Gemini text-embedding-004. Used for cosine similarity search.';
+COMMENT ON COLUMN OIC_KB_ISSUE.VECTOR IS
+    'Vector embedding (3072 dimensions, FLOAT32) generated from SEMANTIC_TEXT using Gemini gemini-embedding-001. Used for cosine similarity search.';
+
 
 -- ── Vector Index (HNSW Cosine) ───────────────────────────────
-CREATE VECTOR INDEX OLL_LOGS_VIDX
-ON OLL_LOGS(VECTOR)
+
+CREATE VECTOR INDEX OIC_KB_ISSUE_VIDX
+ON OIC_KB_ISSUE(VECTOR)
 ORGANIZATION INMEMORY GRAPH
 DISTANCE COSINE
 WITH TARGET ACCURACY 95;
 
+
 -- ── Metadata Indexes ─────────────────────────────────────────
 
-CREATE INDEX OLL_LOGS_FLOW_IDX  ON OLL_LOGS(FLOW_CODE);
-CREATE INDEX OLL_LOGS_JIRA_IDX  ON OLL_LOGS(JIRA_ID);
-CREATE INDEX OLL_LOGS_TIME_IDX  ON OLL_LOGS(EVENT_TIME);
-CREATE INDEX OLL_LOGS_TYPE_IDX  ON OLL_LOGS(LOG_TYPE);
+CREATE INDEX OIC_KB_ISSUE_FLOW_IDX  ON OIC_KB_ISSUE(FLOW_CODE);
+CREATE INDEX OIC_KB_ISSUE_JIRA_IDX  ON OIC_KB_ISSUE(JIRA_ID);
+CREATE INDEX OIC_KB_ISSUE_TIME_IDX  ON OIC_KB_ISSUE(EVENT_TIME);
+CREATE INDEX OIC_KB_ISSUE_TYPE_IDX  ON OIC_KB_ISSUE(LOG_TYPE);
+
 
 -- ── Verify ───────────────────────────────────────────────────
 
 SELECT 'TABLE CREATED OK' AS STATUS
 FROM USER_TABLES
-WHERE TABLE_NAME = 'OLL_LOGS';
+WHERE TABLE_NAME = 'OIC_KB_ISSUE';
 
 SELECT INDEX_NAME, INDEX_TYPE
 FROM USER_INDEXES
-WHERE TABLE_NAME = 'OLL_LOGS';
+WHERE TABLE_NAME = 'OIC_KB_ISSUE';
 
 SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH
 FROM USER_TAB_COLUMNS
-WHERE TABLE_NAME = 'OLL_LOGS'
+WHERE TABLE_NAME = 'OIC_KB_ISSUE'
 ORDER BY COLUMN_ID;
