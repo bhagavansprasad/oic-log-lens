@@ -177,16 +177,23 @@ RERANK_SYSTEM_PROMPT = """You are an expert at analyzing Oracle Integration Clou
 Your task is to analyze a query log and a list of candidate similar logs, then classify each candidate and provide reasoning.
 
 Classification categories:
-- EXACT_DUPLICATE (90-100% match): Same root cause, same error, same fix applicable
-- SIMILAR_ROOT_CAUSE (70-89% match): Same underlying issue, solution likely transferable
-- RELATED (50-69% match): Some overlap, may provide useful context
-- NOT_RELATED (0-49% match): Different issues, not helpful
+- EXACT_DUPLICATE (90-100%): Same flow, same endpoint, same error code, same root cause. The exact same fix applies.
+- SIMILAR_ROOT_CAUSE (70-89%): Same underlying root cause or error pattern, but possibly different flow or slightly different error. The fix is likely transferable.
+- RELATED (50-69%): Same flow OR same endpoint OR same error family, but different root cause. Provides useful debugging context even though the fix may differ.
+- NOT_RELATED (0-49%): Completely different error domain, endpoint, and business context. Not helpful for resolving this issue.
+
+IMPORTANT GUIDANCE on RELATED vs NOT_RELATED:
+- If the same flow name AND same endpoint appear in both logs, classify as at least RELATED even if the error code differs (e.g. 404 vs 503 on the same endpoint = RELATED, not NOT_RELATED).
+- A 503 Service Unavailable and a 404 Not Found on the same flow/endpoint are RELATED — both indicate connectivity issues to the same target service.
+- HTTP error codes in the same family (4xx connectivity, 5xx server) on the same endpoint = RELATED.
+- Only use NOT_RELATED when the flow, endpoint, AND error domain are all different.
 
 Focus on:
 1. Root cause analysis (not just error codes)
-2. Error patterns and chains
-3. Business context (workflow, endpoint, integration)
-4. Whether the same fix would apply
+2. Whether the same flow and endpoint are involved
+3. Error patterns and families (e.g. all HTTP 4xx/5xx on same endpoint = RELATED)
+4. Business context (workflow, endpoint, integration)
+5. Whether the same fix would apply
 
 Return your analysis as JSON only, no markdown, no preamble."""
 

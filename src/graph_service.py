@@ -19,7 +19,6 @@ import oracledb
 from config import logger
 
 # ── CONNECTION CONFIG ──────────────────────────────────────────────────────────
-# Reuses same DB as db.py
 
 DB_USER     = "EA_APP"
 DB_PASSWORD = "jnjnuh"
@@ -49,7 +48,6 @@ INSERT INTO OIC_KB_GRAPH_EDGES (EDGE_ID, FROM_NODE, TO_NODE, EDGE_TYPE, PROPERTI
 VALUES (:edge_id, :from_node, :to_node, :edge_type, :properties, CURRENT_TIMESTAMP)
 """
 
-# Check if an edge already exists (avoid duplicate edges)
 CHECK_EDGE_SQL = """
 SELECT COUNT(*) FROM OIC_KB_GRAPH_EDGES
 WHERE FROM_NODE = :from_node
@@ -57,16 +55,21 @@ WHERE FROM_NODE = :from_node
   AND EDGE_TYPE = :edge_type
 """
 
+# ── FIX: Scoped KG insights query ─────────────────────────────────────────────
+# Traverse: JiraTicket --[LOGGED_IN (reverse)]--> FlowCode --[HAD_ERROR]--> Error
+#           Error --[ON_ENDPOINT]--> Endpoint
+#           Error --[HAS_ROOT_CAUSE]--> RootCause
+# Scoped to this specific JiraTicket so we don't bleed data across logs.
+
 GET_KG_INSIGHTS_SQL = """
 SELECT
     n2.NODE_TYPE,
     n2.NODE_VALUE,
-    e.EDGE_TYPE,
-    e.PROPERTIES
-FROM OIC_KB_GRAPH_EDGES e
-JOIN OIC_KB_GRAPH_NODES n1 ON e.FROM_NODE = n1.NODE_ID
-JOIN OIC_KB_GRAPH_NODES n2 ON e.TO_NODE   = n2.NODE_ID
-WHERE n1.NODE_ID = :node_id
+    e1.EDGE_TYPE
+FROM OIC_KB_GRAPH_EDGES e1
+JOIN OIC_KB_GRAPH_NODES n2 ON e1.TO_NODE = n2.NODE_ID
+WHERE e1.FROM_NODE  = :jira_node
+  AND e1.EDGE_TYPE IN ('ON_ENDPOINT', 'HAS_ROOT_CAUSE')
 """
 
 GET_RECURRENCE_SQL = """
@@ -88,19 +91,10 @@ WHERE e.FROM_NODE = :jira_node
 # ── HELPERS ────────────────────────────────────────────────────────────────────
 
 def _make_node_id(node_type: str, node_value: str) -> str:
-    """
-    Builds a composite NODE_ID string.
-    e.g. _make_node_id("FlowCode", "RH_NAVAN_DAILY") → "FlowCode:RH_NAVAN_DAILY"
-    Truncates to 200 chars to stay within column limit.
-    """
     return f"{node_type}:{node_value}"[:200]
 
 
 def _upsert_node(cursor, node_type: str, node_value: str, properties: dict = None) -> str:
-    """
-    Inserts a node if it doesn't already exist (MERGE/upsert).
-    Returns the NODE_ID.
-    """
     node_id = _make_node_id(node_type, node_value)
     props   = json.dumps(properties) if properties else None
 
@@ -115,10 +109,6 @@ def _upsert_node(cursor, node_type: str, node_value: str, properties: dict = Non
 
 
 def _insert_edge(cursor, from_node: str, to_node: str, edge_type: str, properties: dict = None):
-    """
-    Inserts a directional edge if it doesn't already exist.
-    """
-    # Check for existing edge first
     cursor.execute(CHECK_EDGE_SQL, {
         "from_node": from_node,
         "to_node":   to_node,
@@ -146,33 +136,17 @@ def _insert_edge(cursor, from_node: str, to_node: str, edge_type: str, propertie
 # ── WRITE: ADD LOG TO GRAPH ────────────────────────────────────────────────────
 
 def add_log_to_graph(normalized_log: dict, jira_id: str) -> bool:
-    """
-    Writes nodes and edges to the knowledge graph from a normalized log.
-    Called during ingestion after the log is stored in OIC_KB_ISSUE.
-
-    Nodes created  : FlowCode, Error, Endpoint, RootCause, JiraTicket
-    Edges created  : HAD_ERROR, ON_ENDPOINT, HAS_ROOT_CAUSE, LOGGED_IN
-
-    Args:
-        normalized_log: Normalized log dict (output of normalize_log).
-        jira_id:        Jira issue ID associated with this log.
-
-    Returns:
-        True if successful, False if graph write failed (non-fatal).
-    """
     try:
         flow  = normalized_log.get("flow")  or {}
         error = normalized_log.get("error") or {}
         msg   = error.get("message_parsed") or {}
 
-        # ── Extract entity values ──────────────────────────────────────────────
         flow_code   = flow.get("code")
         trigger     = flow.get("trigger_type")
         error_code  = error.get("code")
         endpoint    = error.get("endpoint_name")
         root_cause  = msg.get("root_cause")
 
-        # Skip if no meaningful data
         if not flow_code and not error_code:
             logger.warning("graph_service: skipping — no flow_code or error_code found")
             return False
@@ -181,13 +155,11 @@ def add_log_to_graph(normalized_log: dict, jira_id: str) -> bool:
         cursor = conn.cursor()
 
         try:
-            # ── Upsert Nodes ───────────────────────────────────────────────────
-
-            flow_node   = None
-            error_node  = None
-            ep_node     = None
-            rc_node     = None
-            jira_node   = None
+            flow_node  = None
+            error_node = None
+            ep_node    = None
+            rc_node    = None
+            jira_node  = None
 
             if flow_code:
                 flow_node = _upsert_node(
@@ -205,30 +177,35 @@ def add_log_to_graph(normalized_log: dict, jira_id: str) -> bool:
                 rc_node = _upsert_node(cursor, "RootCause", root_cause)
 
             if jira_id:
-                # Store just the ticket ID (e.g. OLL-4FF0674A) as the value
                 ticket_id = jira_id.split("/")[-1] if "/" in jira_id else jira_id
                 jira_node = _upsert_node(
                     cursor, "JiraTicket", ticket_id,
                     properties={"full_url": jira_id}
                 )
 
-            # ── Insert Edges ───────────────────────────────────────────────────
-
-            # FlowCode --[HAD_ERROR]--> Error
             if flow_node and error_node:
                 _insert_edge(cursor, flow_node, error_node, "HAD_ERROR")
 
-            # Error --[ON_ENDPOINT]--> Endpoint
             if error_node and ep_node:
                 _insert_edge(cursor, error_node, ep_node, "ON_ENDPOINT")
 
-            # Error --[HAS_ROOT_CAUSE]--> RootCause
             if error_node and rc_node:
                 _insert_edge(cursor, error_node, rc_node, "HAS_ROOT_CAUSE")
 
-            # FlowCode --[LOGGED_IN]--> JiraTicket
             if flow_node and jira_node:
                 _insert_edge(cursor, flow_node, jira_node, "LOGGED_IN")
+
+            # ── Direct JiraTicket edges for scoped KG insights ─────────────────
+            # Allows GET_KG_INSIGHTS_SQL to find the exact Error/Endpoint/RootCause
+            # for THIS ticket without bleeding across shared FlowCode nodes.
+            if jira_node and error_node:
+                _insert_edge(cursor, jira_node, error_node, "HAD_ERROR")
+
+            if jira_node and ep_node:
+                _insert_edge(cursor, jira_node, ep_node, "ON_ENDPOINT")
+
+            if jira_node and rc_node:
+                _insert_edge(cursor, jira_node, rc_node, "HAS_ROOT_CAUSE")
 
             conn.commit()
             logger.info(f"graph_service: log added to graph | flow={flow_code} | jira={jira_id}")
@@ -244,7 +221,6 @@ def add_log_to_graph(normalized_log: dict, jira_id: str) -> bool:
             conn.close()
 
     except Exception as e:
-        # Graph write failure is non-fatal — log and continue
         logger.error(f"graph_service: add_log_to_graph failed: {e}")
         return False
 
@@ -257,19 +233,6 @@ def add_jira_relationship(
     edge_type: str,
     confidence: int = None
 ) -> bool:
-    """
-    Adds a DUPLICATE_OF or RELATED_TO edge between two JiraTicket nodes.
-    Called during search after LLM re-ranking classifies the relationship.
-
-    Args:
-        from_jira_id: The new/query Jira ticket ID.
-        to_jira_id:   The matched existing Jira ticket ID.
-        edge_type:    DUPLICATE_OF | RELATED_TO
-        confidence:   LLM confidence score (0-100), stored as edge property.
-
-    Returns:
-        True if successful, False otherwise (non-fatal).
-    """
     try:
         from_ticket = from_jira_id.split("/")[-1] if "/" in from_jira_id else from_jira_id
         to_ticket   = to_jira_id.split("/")[-1]   if "/" in to_jira_id   else to_jira_id
@@ -300,22 +263,6 @@ def add_jira_relationship(
 # ── READ: ENRICH SEARCH RESULTS ────────────────────────────────────────────────
 
 def enrich_search_results(matches: list[dict]) -> list[dict]:
-    """
-    Enriches search results with Knowledge Graph insights.
-    Called during search after LLM re-ranking.
-
-    For each match, traverses the graph to find:
-    - Root cause
-    - Related endpoints
-    - Recurrence count (how many times this flow+error combo occurred)
-    - Related Jira tickets
-
-    Args:
-        matches: List of search match dicts from search_service.py
-
-    Returns:
-        Same list with kg_insights added to each match (non-fatal if KG fails).
-    """
     try:
         conn   = get_connection()
         cursor = conn.cursor()
@@ -338,14 +285,14 @@ def enrich_search_results(matches: list[dict]) -> list[dict]:
                     "related_tickets":  []
                 }
 
-                # ── Root cause + endpoints via JiraTicket → FlowCode → Error ──
-                if error_node:
-                    cursor.execute(GET_KG_INSIGHTS_SQL, {"node_id": error_node})
-                    rows = cursor.fetchall()
-                    for node_type, node_value, edge_type, _ in rows:
-                        if edge_type == "HAS_ROOT_CAUSE":
-                            insights["root_cause"] = node_value
-                        elif edge_type == "ON_ENDPOINT":
+                # ── Scoped insights: traverse via JiraTicket → FlowCode → Error ──
+                cursor.execute(GET_KG_INSIGHTS_SQL, {"jira_node": jira_node})
+                rows = cursor.fetchall()
+                for node_type, node_value, edge_type in rows:
+                    if edge_type == "HAS_ROOT_CAUSE":
+                        insights["root_cause"] = node_value
+                    elif edge_type == "ON_ENDPOINT":
+                        if node_value not in insights["endpoints"]:
                             insights["endpoints"].append(node_value)
 
                 # ── Recurrence count ───────────────────────────────────────────
@@ -369,7 +316,6 @@ def enrich_search_results(matches: list[dict]) -> list[dict]:
             conn.close()
 
     except Exception as e:
-        # KG enrichment failure is non-fatal — return matches as-is
         logger.error(f"graph_service: enrich_search_results failed: {e}")
 
     return matches

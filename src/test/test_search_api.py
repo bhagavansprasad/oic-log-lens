@@ -10,7 +10,9 @@ import json
 import requests
 
 # Read log file
-with open('flow-logs/01_flow-log.json', 'r') as f:
+log_to_search = 'flow-logs/01_flow-log.json'
+log_to_search = 'gen-logs/T01_flow-log.json'
+with open(log_to_search, 'r') as f:
     log_content = f.read()
 
 # Call search endpoint

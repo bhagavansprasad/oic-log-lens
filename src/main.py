@@ -5,6 +5,8 @@ FastAPI REST API for OIC-LogLens.
 Provides endpoints for log ingestion and deduplication search.
 """
 
+import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -160,6 +162,8 @@ def ingest_database(request: IngestDatabaseRequest):
     failed = 0
     duplicates = 0
     
+    BATCH_SLEEP_SECONDS = 15  # sleep between logs to avoid LLM rate limits
+
     for i, raw_log in enumerate(raw_logs, 1):
         try:
             logger.info(f"Processing log {i}/{len(raw_logs)}")
@@ -201,6 +205,12 @@ def ingest_database(request: IngestDatabaseRequest):
                 status="error",
                 message=f"Log {i}: {str(e)}"
             ))
+
+        # Sleep between logs to avoid hitting LLM rate limits
+        # Skip sleep after the last log
+        if i < len(raw_logs):
+            logger.info(f"Sleeping {BATCH_SLEEP_SECONDS}s before next log (rate limit buffer)...")
+            time.sleep(BATCH_SLEEP_SECONDS)
     
     # Determine overall status
     if successful == len(raw_logs):
@@ -254,6 +264,48 @@ def search_duplicate(request: SearchRequest):
     )
 
 # ── Run Server ─────────────────────────────────────────────────────────────────
+
+
+@app.get(
+    "/stats/cache",
+    tags=["System"],
+    summary="Get cache statistics"
+)
+def get_cache_statistics():
+    """
+    Get performance cache statistics.
+    
+    Shows hit rates, sizes, and efficiency metrics
+    for normalized logs, embeddings, and search results.
+    """
+    from cache import get_cache_stats
+    return get_cache_stats()
+
+
+@app.post(
+    "/admin/clear-cache",
+    tags=["System"],
+    summary="Clear all caches"
+)
+def clear_caches():
+    """
+    Clear all performance caches.
+    
+    Use this if you need to force fresh results
+    or after updating the normalization/embedding logic.
+    """
+    from cache import clear_all_caches
+    clear_all_caches()
+    return {"status": "success", "message": "All caches cleared"}
+
+
+# ── SHUTDOWN HANDLER ───────────────────────────────────────────────────────────
+
+@app.on_event("shutdown")
+def shutdown_event():
+    """Clean up resources on shutdown"""
+    from db import close_connection_pool
+    close_connection_pool()
 
 if __name__ == "__main__":
     import uvicorn
