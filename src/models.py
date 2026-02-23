@@ -5,7 +5,7 @@ Pydantic models for OIC-LogLens REST API request/response schemas.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 
 # ── REQUEST MODELS ─────────────────────────────────────────────────────────────
@@ -58,7 +58,6 @@ class ErrorResponse(BaseModel):
         }
 
 
-
 # ── SEARCH MODELS ──────────────────────────────────────────────────────────────
 
 class SearchRequest(BaseModel):
@@ -73,6 +72,14 @@ class SearchRequest(BaseModel):
         }
 
 
+class KGInsights(BaseModel):
+    """Knowledge Graph insights for a search match"""
+    root_cause: Optional[str] = Field(None, description="Root cause extracted from Knowledge Graph")
+    endpoints: List[str] = Field(default_factory=list, description="Endpoints associated with this error")
+    recurrence_count: int = Field(default=0, description="Number of times this flow+error combination has occurred")
+    related_tickets: List[str] = Field(default_factory=list, description="Related Jira ticket IDs from Knowledge Graph")
+
+
 class SearchMatch(BaseModel):
     """Single search result match"""
     jira_id: str = Field(..., description="Jira issue ID")
@@ -85,6 +92,7 @@ class SearchMatch(BaseModel):
     classification: Optional[str] = Field(None, description="EXACT_DUPLICATE | SIMILAR_ROOT_CAUSE | RELATED | NOT_RELATED")
     confidence: Optional[int] = Field(None, description="LLM confidence score (0-100)")
     reasoning: Optional[str] = Field(None, description="LLM explanation of classification")
+    kg_insights: Optional[KGInsights] = Field(None, description="Knowledge Graph insights — root cause, recurrence, related tickets")
 
 
 class SearchResponse(BaseModel):
@@ -105,12 +113,21 @@ class SearchResponse(BaseModel):
                         "flow_code": "RH_NAVAN_DAILY_INTEGR_SCHEDU",
                         "trigger_type": "scheduled",
                         "error_code": "Execution failed",
-                        "error_summary": "oracle.cloud.connector.api.CloudInvocationException"
+                        "error_summary": "oracle.cloud.connector.api.CloudInvocationException",
+                        "rank": 1,
+                        "classification": "EXACT_DUPLICATE",
+                        "confidence": 100,
+                        "reasoning": "Same flow, same error, same root cause",
+                        "kg_insights": {
+                            "root_cause": "Not Found",
+                            "endpoints": ["InvokeIntegration"],
+                            "recurrence_count": 1,
+                            "related_tickets": []
+                        }
                     }
                 ]
             }
         }
-
 
 
 class IngestURLRequest(BaseModel):
@@ -149,7 +166,6 @@ class IngestDatabaseRequest(BaseModel):
                 "query": "SELECT log_json FROM logs WHERE id = 123"
             }
         }
-
 
 
 class BatchIngestResponse(BaseModel):

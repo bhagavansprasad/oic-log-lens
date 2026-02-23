@@ -123,7 +123,7 @@ New Error Occurs → Submit to OIC-LogLens → Get Similar Past Issues → Resol
 │  Gemini AI   │      │ Oracle 26ai  │
 │              │      │ Vector DB    │
 │ • 2.0 Flash  │      │              │
-│ • Embeddings │      │ OLL_LOGS     │
+│ • Embeddings │      │ OIC_KB_ISSUE     │
 │   (3072 dim) │      │ • HNSW Index │
 └──────────────┘      └──────────────┘
 ```
@@ -321,9 +321,18 @@ docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1
 # Useful commands
 SHOW USER;
 SELECT table_name FROM user_tables;
-SELECT * FROM OLL_LOGS;
-SELECT COUNT(*) FROM OLL_LOGS;
-TRUNCATE TABLE OLL_LOGS;
+SELECT * FROM OIC_KB_ISSUE;
+SELECT COUNT(*) FROM OIC_KB_ISSUE;
+
+TRUNCATE TABLE OIC_KB_GRAPH_EDGES;
+TRUNCATE TABLE OIC_KB_GRAPH_NODES;
+TRUNCATE TABLE OIC_KB_ISSUE;
+TRUNCATE TABLE TEST_LOGS;
+
+SELECT COUNT(*) FROM OIC_KB_GRAPH_EDGES;
+SELECT COUNT(*) FROM OIC_KB_GRAPH_NODES;
+SELECT COUNT(*) FROM OIC_KB_ISSUE;
+SELECT COUNT(*) FROM TEST_LOG;
 
 # Copy SQL file to container
 docker cp oic_kb_schema.sql oracle26ai_db_bhagavan:/tmp/oic_kb_schema.sql
@@ -660,7 +669,7 @@ After:  🟢 EXACT_DUPLICATE (100%) ← Use this Jira, don't create new!
 - [ ] **Sequence diagrams** — Add detailed RAG flow diagrams
 - [ ] **Performance optimization** — Add caching, connection pooling
 - [ ] **Monitoring dashboard** — Real-time stats, log history viewer
-- [ ] **Table naming** — Consider renaming `OLL_LOGS` to more descriptive name
+- [ ] **Table naming** — Consider renaming `OIC_KB_ISSUE` to more descriptive name
 
 
 ---
