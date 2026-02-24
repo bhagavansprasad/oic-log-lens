@@ -168,6 +168,53 @@ class IngestDatabaseRequest(BaseModel):
         }
 
 
+class BatchJobAccepted(BaseModel):
+    """Response model for POST /ingest/database — returned immediately"""
+    job_id: str = Field(..., description="Unique job ID to poll for status")
+    status: str = Field(default="accepted", description="Always 'accepted'")
+    message: str = Field(..., description="Human readable message")
+    total_logs: int = Field(..., description="Total logs queued for processing")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "job_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                "status": "accepted",
+                "message": "16 logs queued for background processing",
+                "total_logs": 16
+            }
+        }
+
+
+class BatchJobStatus(BaseModel):
+    """Response model for GET /ingest/status/{job_id}"""
+    job_id: str = Field(..., description="Job ID")
+    status: str = Field(..., description="pending | in_progress | completed | failed")
+    total_logs: int = Field(..., description="Total logs to process")
+    processed: int = Field(..., description="Logs processed so far")
+    successful: int = Field(..., description="Successfully ingested")
+    duplicates: int = Field(..., description="Duplicates skipped")
+    failed: int = Field(..., description="Failed logs")
+    current_log: Optional[int] = Field(None, description="Index of log currently being processed")
+    results: list = Field(default_factory=list, description="Individual results so far")
+    error: Optional[str] = Field(None, description="Error message if job failed entirely")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "job_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                "status": "in_progress",
+                "total_logs": 16,
+                "processed": 5,
+                "successful": 4,
+                "duplicates": 1,
+                "failed": 0,
+                "current_log": 6,
+                "results": []
+            }
+        }
+
+
 class BatchIngestResponse(BaseModel):
     """Response model for batch ingestion"""
     status: str = Field(..., description="success or partial_success or error")

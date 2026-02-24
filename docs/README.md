@@ -324,29 +324,6 @@ docker exec -it oracle26ai_db sqlplus EA_APP/YourPassword@FREEPDB1 @/tmp/oll_sch
 # Connect to Oracle 26ai via Docker
 docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1
 
-# Useful commands
-SHOW USER;
-SELECT table_name FROM user_tables;
-SELECT * FROM OIC_KB_ISSUE;
-SELECT COUNT(*) FROM OIC_KB_ISSUE;
-
-TRUNCATE TABLE OIC_KB_GRAPH_EDGES;
-TRUNCATE TABLE OIC_KB_GRAPH_NODES;
-TRUNCATE TABLE OIC_KB_ISSUE;
-TRUNCATE TABLE TEST_LOGS;
-
-SELECT COUNT(*) FROM OIC_KB_GRAPH_EDGES;
-SELECT COUNT(*) FROM OIC_KB_GRAPH_NODES;
-SELECT COUNT(*) FROM OIC_KB_ISSUE;
-SELECT COUNT(*) FROM TEST_LOG;
-
-# Copy SQL file to container
-docker cp oic_kb_schema.sql oracle26ai_db_bhagavan:/tmp/oic_kb_schema.sql
-docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/oic_kb_schema.sql
-
-docker cp kg_schema.sql oracle26ai_db_bhagavan:/tmp/kg_schema.sql
-docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/kg_schema.sql
-```
 
 ### 3. Python Dependencies
 
@@ -671,3 +648,28 @@ After:  🟢 EXACT_DUPLICATE (100%) ← Use this Jira, don't create new!
 ---
 
 **Built with ❤️ for the Oracle Integration Cloud community**
+
+# Useful commands
+```SQL
+SHOW USER;
+SELECT table_name FROM user_tables;
+SELECT * FROM OIC_KB_ISSUE;
+SELECT COUNT(*) FROM OIC_KB_ISSUE;
+
+TRUNCATE TABLE OIC_KB_GRAPH_EDGES;
+TRUNCATE TABLE OIC_KB_GRAPH_NODES;
+TRUNCATE TABLE OIC_KB_ISSUE;
+TRUNCATE TABLE TEST_LOGS;
+
+SELECT COUNT(*) FROM OIC_KB_GRAPH_EDGES;
+SELECT COUNT(*) FROM OIC_KB_GRAPH_NODES;
+SELECT COUNT(*) FROM OIC_KB_ISSUE;
+SELECT COUNT(*) FROM TEST_LOG;
+
+# Copy SQL file to container
+docker cp oic_kb_schema.sql oracle26ai_db_bhagavan:/tmp/oic_kb_schema.sql
+docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/oic_kb_schema.sql
+
+docker cp kg_schema.sql oracle26ai_db_bhagavan:/tmp/kg_schema.sql
+docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/kg_schema.sql
+```

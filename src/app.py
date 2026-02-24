@@ -249,79 +249,152 @@ if page == "📥 Ingest Logs":
     # ── Tab 4: Database ──
     with tab4:
         st.subheader("Ingest from Database")
-        st.markdown("Query a log from Oracle or other database.")
-        
+        st.markdown("Query logs from Oracle or other database. Runs in the background — no timeout.")
+
         col1, col2 = st.columns(2)
-        
+
         with col1:
             connection_string = st.text_input(
                 "Connection String",
                 value="EA_APP/jnjnuh@localhost/FREEPDB1",
                 help="Database connection string"
             )
-        
+
         with col2:
             query = st.text_input(
                 "SQL Query",
-                value="SELECT LOG_JSON FROM TEST_LOGS WHERE LOG_ID = 1",
-                help="SQL query to fetch the log"
+                value="SELECT LOG_JSON FROM TEST_LOGS ORDER BY LOG_ID",
+                help="SQL query to fetch logs (can return multiple rows)"
             )
-        
-        if st.button("🚀 Ingest from Database", type="primary", key="ingest_db"):
-            with st.spinner("Querying database and ingesting log..."):
-                try:
-                    response = requests.post(
-                        f"{API_BASE_URL}/ingest/database",
-                        json={
-                            "connection_string": connection_string,
-                            "query": query
-                        },
-                        timeout=60
+
+        # ── Session state for tracking background job ──
+        if "db_job_id" not in st.session_state:
+            st.session_state.db_job_id = None
+        if "db_job_done" not in st.session_state:
+            st.session_state.db_job_done = False
+
+        col_btn1, col_btn2 = st.columns([1, 4])
+
+        with col_btn1:
+            submit = st.button("🚀 Ingest from Database", type="primary", key="ingest_db")
+
+        with col_btn2:
+            if st.session_state.db_job_id and not st.session_state.db_job_done:
+                st.button("🔄 Refresh Status", key="refresh_db")
+
+        # ── Submit job ──
+        if submit:
+            st.session_state.db_job_id = None
+            st.session_state.db_job_done = False
+            try:
+                response = requests.post(
+                    f"{API_BASE_URL}/ingest/database",
+                    json={"connection_string": connection_string, "query": query},
+                    timeout=30
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    st.session_state.db_job_id = data["job_id"]
+                    st.markdown(
+                        f'<div class="info-box">⏳ <b>Job Accepted!</b> ' +
+                        f'{data["total_logs"]} logs queued. Job ID: <code>{data["job_id"]}</code></div>',
+                        unsafe_allow_html=True
                     )
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        
-                        # Handle batch response
-                        if data["status"] == "success":
-                            st.markdown(f'<div class="success-box">✅ <b>Success!</b> {data["message"]}</div>', unsafe_allow_html=True)
-                        elif data["status"] == "partial_success":
-                            st.markdown(f'<div class="info-box">⚠️ <b>Partial Success!</b> {data["message"]}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(
+                        f'<div class="error-box">❌ <b>Error submitting job!</b><br>{response.text}</div>',
+                        unsafe_allow_html=True
+                    )
+            except Exception as e:
+                st.markdown(
+                    f'<div class="error-box">❌ <b>Request Failed!</b><br>{str(e)}</div>',
+                    unsafe_allow_html=True
+                )
+
+        # ── Poll and display job status ──
+        if st.session_state.db_job_id:
+            job_id = st.session_state.db_job_id
+            try:
+                status_resp = requests.get(
+                    f"{API_BASE_URL}/ingest/status/{job_id}",
+                    timeout=10
+                )
+
+                if status_resp.status_code == 200:
+                    job = status_resp.json()
+                    total = job["total_logs"]
+                    processed = job["processed"]
+                    status = job["status"]
+
+                    # ── Progress bar ──
+                    progress = processed / total if total > 0 else 0
+                    st.progress(progress, text=f"Processing {processed}/{total} logs...")
+
+                    # ── Status metrics ──
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total", total)
+                    with col2:
+                        st.metric("✅ Successful", job["successful"])
+                    with col3:
+                        st.metric("⚠️ Duplicates", job["duplicates"])
+                    with col4:
+                        st.metric("❌ Failed", job["failed"])
+
+                    # ── Status badge ──
+                    if status == "pending":
+                        st.info("⏳ Job is pending — will start shortly...")
+                    elif status == "in_progress":
+                        current = job.get("current_log")
+                        st.info(f"⚙️ Processing log {current}/{total}... Click **Refresh Status** to update.")
+                    elif status == "completed":
+                        st.session_state.db_job_done = True
+                        if job["failed"] == 0:
+                            st.markdown(
+                                f'<div class="success-box">✅ <b>Completed!</b> ' +
+                                f'{job["successful"]} ingested, {job["duplicates"]} duplicates, {job["failed"]} failed.</div>',
+                                unsafe_allow_html=True
+                            )
                         else:
-                            st.markdown(f'<div class="error-box">❌ <b>Error!</b> {data["message"]}</div>', unsafe_allow_html=True)
-                        
-                        # Show summary metrics
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("Total", data["total_logs"])
-                        with col2:
-                            st.metric("✅ Successful", data["successful"])
-                        with col3:
-                            st.metric("⚠️ Duplicates", data["duplicates"])
-                        with col4:
-                            st.metric("❌ Failed", data["failed"])
-                        
-                        # Show individual results
-                        if data.get("results"):
-                            with st.expander("📋 View Individual Results", expanded=True):
-                                for i, result in enumerate(data["results"], 1):
-                                    if result["status"] == "success":
-                                        st.success(f"**Log {i}:** {result['message']}")
-                                        st.markdown(f"  - Log ID: `{result['log_id']}`")
-                                        st.markdown(f"  - Jira: [{result['jira_id'].split('/')[-1]}]({result['jira_id']})")
-                                    elif result["status"] == "duplicate":
-                                        st.warning(f"**Log {i}:** {result['message']}")
-                                    else:
-                                        st.error(f"**Log {i}:** {result['message']}")
-                    
-                    elif response.status_code == 409:
-                        st.markdown(f'<div class="error-box">⚠️ <b>Duplicate Detected!</b><br>{response.json()["detail"]}</div>', unsafe_allow_html=True)
-                    
-                    else:
-                        st.markdown(f'<div class="error-box">❌ <b>Error!</b><br>{response.json()["detail"]}</div>', unsafe_allow_html=True)
-                
-                except Exception as e:
-                    st.markdown(f'<div class="error-box">❌ <b>Request Failed!</b><br>{str(e)}</div>', unsafe_allow_html=True)
+                            st.markdown(
+                                f'<div class="info-box">⚠️ <b>Completed with errors.</b> ' +
+                                f'{job["successful"]} ingested, {job["duplicates"]} duplicates, {job["failed"]} failed.</div>',
+                                unsafe_allow_html=True
+                            )
+                    elif status == "failed":
+                        st.session_state.db_job_done = True
+                        st.markdown(
+                            f'<div class="error-box">❌ <b>Job failed!</b><br>{job.get("error", "Unknown error")}</div>',
+                            unsafe_allow_html=True
+                        )
+
+                    # ── Individual results ──
+                    if job.get("results"):
+                        with st.expander(f"📋 View Results ({len(job['results'])} so far)", expanded=False):
+                            for result in job["results"]:
+                                i = result["log_index"]
+                                if result["status"] == "success":
+                                    st.success(f"**Log {i}:** {result['message']}")
+                                    st.markdown(f"  - Log ID: `{result['log_id']}`")
+                                    jira = result['jira_id']
+                                    st.markdown(f"  - Jira: [{jira.split('/')[-1]}]({jira})")
+                                elif result["status"] == "duplicate":
+                                    st.warning(f"**Log {i}:** {result['message']}")
+                                else:
+                                    st.error(f"**Log {i}:** {result['message']}")
+
+                elif status_resp.status_code == 404:
+                    st.markdown(
+                        f'<div class="error-box">❌ Job not found. It may have expired.</div>',
+                        unsafe_allow_html=True
+                    )
+
+            except Exception as e:
+                st.markdown(
+                    f'<div class="error-box">❌ <b>Failed to fetch job status!</b><br>{str(e)}</div>',
+                    unsafe_allow_html=True
+                )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
