@@ -672,4 +672,7 @@ docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/oic_
 
 docker cp kg_schema.sql oracle26ai_db_bhagavan:/tmp/kg_schema.sql
 docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1 @/tmp/kg_schema.sql
+docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1
+docker exec -it oracle26ai_db_bhagavan sqlplus system/Abcd1234@localhost/FREE
+
 ```
