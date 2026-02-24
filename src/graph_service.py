@@ -73,10 +73,14 @@ WHERE e1.FROM_NODE  = :jira_node
 """
 
 GET_RECURRENCE_SQL = """
-SELECT COUNT(*) FROM OIC_KB_GRAPH_EDGES
-WHERE FROM_NODE = :flow_node
-  AND EDGE_TYPE = 'HAD_ERROR'
-  AND TO_NODE   = :error_node
+SELECT COUNT(*)
+FROM OIC_KB_GRAPH_EDGES e1
+JOIN OIC_KB_GRAPH_EDGES e2 ON e1.TO_NODE   = e2.FROM_NODE
+                           AND e2.EDGE_TYPE = 'HAD_ERROR'
+                           AND e2.TO_NODE   = :error_node
+WHERE e1.FROM_NODE = :flow_node
+  AND e1.EDGE_TYPE = 'LOGGED_IN'
+  AND e1.TO_NODE   LIKE 'JiraTicket:%'
 """
 
 GET_RELATED_TICKETS_SQL = """
@@ -296,6 +300,8 @@ def enrich_search_results(matches: list[dict]) -> list[dict]:
                             insights["endpoints"].append(node_value)
 
                 # ── Recurrence count ───────────────────────────────────────────
+                # Counts JiraTickets for this specific FlowCode that also had
+                # this same Error — i.e. how many times THIS flow hit THIS error.
                 if flow_node and error_node:
                     cursor.execute(GET_RECURRENCE_SQL, {
                         "flow_node":  flow_node,

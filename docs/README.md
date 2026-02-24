@@ -29,6 +29,12 @@ Transform OIC troubleshooting from reactive debugging to AI-driven resolution in
 - [License](#license)
 
 ---
+```bash
+streamlit run app.py
+python main.py
+docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1
+```
+
 
 ## 🎯 Problem Statement
 
@@ -388,22 +394,12 @@ python -c "import oracledb; conn = oracledb.connect('EA_APP/password@localhost/F
 
 ### API Server
 
-```bash
-# Start server
-cd OIC-LogLens/src
-python main.py
-
-# Server starts at http://localhost:8000
-# API docs at http://localhost:8000/docs
-```
-
 ### Web UI
 
 ```bash
-# Start UI (in separate terminal)
 streamlit run app.py
-
-# UI opens at http://localhost:8501
+python main.py
+docker exec -it oracle26ai_db_bhagavan sqlplus EA_APP/jnjnuh@FREEPDB1
 ```
 
 ### Command Line
