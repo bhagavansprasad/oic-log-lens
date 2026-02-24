@@ -1,7 +1,7 @@
-# OIC-LogLens — Knowledge Graph (KG) Phase 1
+# OIC-LogLens — Knowledge Graph (KG) Feature Documentation
 
-> Feature documentation covering synthetic log design, relationship patterns,
-> search output interpretation, and before/after KG comparison.
+> Covers synthetic log design, relationship patterns, search output interpretation,
+> before/after KG comparison, validation results, and pending backlog.
 
 ---
 
@@ -131,19 +131,19 @@ Rank N:
   --- KG Insights ---
   Root Cause     : Not Found               ← parsed root cause from this ticket's graph path
   Endpoints      : InvokeIntegration       ← endpoints this ticket's error hit
-  Recurrence     : 1 time(s)              ← how many times this flow+error combination occurred
+  Recurrence     : 3 time(s)              ← how many times this flow+error combination occurred
   Related Tickets: OLL-ABC, OLL-DEF        ← tickets linked by DUPLICATE_OF or RELATED_TO edges
 ```
 
 ### 4.2 How to Read Each KG Field
 
-**Root Cause** — The exact root cause extracted during ingestion for *this specific ticket*. This is scoped to the ticket's own graph path (`JiraTicket → Error → RootCause`), so it will never show another ticket's root cause.
+**Root Cause** — The exact root cause extracted during ingestion for *this specific ticket*. Scoped to the ticket's own graph path (`JiraTicket → Error → RootCause`) so it never shows another ticket's root cause.
 
 **Endpoints** — Which OIC adapter endpoints were involved when the error occurred. Useful for pinpointing which adapter or target system to investigate.
 
-**Recurrence** — How many times the same flow produced the same error in the knowledge base. A count of 3 means there are 3 separate Jira tickets all showing this same error pattern — a strong signal it is a recurring systemic issue rather than a one-off.
+**Recurrence** — How many times the same flow produced the same error in the knowledge base. Counted by traversing `FlowCode --[LOGGED_IN]--> JiraTicket --[HAD_ERROR]--> Error`, scoped to this specific flow + error combination. A count of 3 means 3 separate Jira tickets for the same flow hit the same error — a strong signal of a recurring systemic issue.
 
-**Related Tickets** — Jira tickets that the LLM classified as `DUPLICATE_OF` or `RELATED_TO` this ticket in previous searches. This builds up over time as more searches are run, forming a web of linked issues.
+**Related Tickets** — Jira tickets that the LLM classified as `DUPLICATE_OF` or `RELATED_TO` this ticket in previous searches. Builds up over time as more searches are run.
 
 ### 4.3 Decision Guide
 
@@ -202,7 +202,7 @@ Rank 1:
   --- KG Insights ---
   Root Cause     : Not Found
   Endpoints      : InvokeIntegration
-  Recurrence     : 1 time(s)
+  Recurrence     : 3 time(s)
   Related Tickets: None
 ```
 
@@ -214,35 +214,94 @@ Rank 1:
 | LLM classification | ✅ EXACT_DUPLICATE etc. | ✅ EXACT_DUPLICATE etc. |
 | Root cause visible in results | ❌ Must open Jira ticket | ✅ Shown inline |
 | Endpoint context | ❌ Not shown | ✅ Shown inline |
-| Recurrence count | ❌ Not available | ✅ Shown inline |
+| Recurrence count | ❌ Not available | ✅ Shown inline, scoped per flow+error |
 | Cross-ticket linking | ❌ Not available | ✅ DUPLICATE_OF / RELATED_TO edges |
 | Scoped per ticket | N/A | ✅ Each ticket shows its own data |
 | Improves over time | ❌ Static | ✅ Graph grows with every search |
 
-### 5.4 Real Validation Result
+---
 
-Searching with **T01** (`RH_NAVAN_DAILY_INTEGR_SCHEDU`, 404 Not Found) against all 16 ingested logs:
+## 6. Validation Results
 
-| Rank | Jira Ticket | Classification | KG Root Cause | KG Endpoint |
-|---|---|---|---|---|
-| 1 | OLL-4FF0674A | EXACT_DUPLICATE (100%) | Not Found | InvokeIntegration |
-| 2 | OLL-EB5B1B12 | EXACT_DUPLICATE (100%) | Not Found | InvokeIntegration |
-| 3 | OLL-96E9EDBF | EXACT_DUPLICATE (100%) | Not Found | InvokeIntegration |
-| 4 | OLL-A59D9F74 | SIMILAR_ROOT_CAUSE (80%) | Not Found | InvokeIntegration |
-| 5 | OLL-61B5BE03 | RELATED (65%) | Service Unavailable | InvokeIntegration |
+All three synthetic log groups were validated against the search pipeline.
 
-All 5 classifications match expected. All 5 KG root causes are correctly scoped to their own ticket — no cross-log data bleed.
+### Group A — T01 Query (NAVAN DAILY, 404 Not Found)
+
+| Rank | Jira Ticket | Classification | KG Root Cause | KG Recurrence | ✅/❌ |
+|---|---|---|---|---|---|
+| 1 | OLL-4FF0674A | EXACT_DUPLICATE (100%) | Not Found | 3 | ✅ |
+| 2 | OLL-EB5B1B12 | EXACT_DUPLICATE (100%) | Not Found | 3 | ✅ |
+| 3 | OLL-96E9EDBF | EXACT_DUPLICATE (100%) | Not Found | 3 | ✅ |
+| 4 | OLL-A59D9F74 | SIMILAR_ROOT_CAUSE (80%) | Not Found | 1 | ✅ |
+| 5 | OLL-61B5BE03 | RELATED (65%) | Service Unavailable | 1 | ✅ |
+
+**5/5 correct ✅**
+
+### Group B — T05 Query (ORDERVALIDATION, 401 Unauthorized)
+
+| Rank | Jira Ticket | Flow | Classification | KG Root Cause | ✅/❌ |
+|---|---|---|---|---|---|
+| 1 | OLL-AD4B3FC4 | ORDERVALIDATION (real) | EXACT_DUPLICATE (100%) | N/A | ✅ |
+| 2 | OLL-9760B2BE | ORDERVALIDATION (T05) | EXACT_DUPLICATE (100%) | N/A | ✅ |
+| 3 | OLL-51D6EACF | ORDERFULFILLMENT (T06) | SIMILAR_ROOT_CAUSE (85%) | Unauthorized | ✅ |
+| 4 | OLL-DD026514 | EXTCOMMONORDER 503 | NOT_RELATED (40%) | N/A | ✅ |
+| 5 | OLL-21E195B4 | INT1_SOAP_GTM 406 | NOT_RELATED (40%) | Target URL... | ✅ |
+
+**5/5 correct ✅**
+
+Note: Ranks 1 and 2 show `Root Cause: N/A` because the 401 error message is an ASM policy string — clean root cause extraction is a normalizer improvement, not a KG bug.
+
+### Group C — T07 Query (TEST_BPA_PRICE_UPDATE_V3, ORA-00942)
+
+| Rank | Jira Ticket | Flow | Classification | KG Root Cause | ✅/❌ |
+|---|---|---|---|---|---|
+| 1 | OLL-592BDEBD | TEST_BPA (T07) | EXACT_DUPLICATE (100%) | ORA-00942 | ✅ |
+| 2 | OLL-3C5C205C | TEST_BPA CA-BS-001 (real) | SIMILAR_ROOT_CAUSE (90%) | ORA-00942 | ⚠️ |
+| 3 | OLL-DD026514 | EXTCOMMONORDER 503 | RELATED (60%) | N/A | ⚠️ |
+| 4 | OLL-67F1D465 | SUPPLIER_SYNC 500 | NOT_RELATED (30%) | JBO-FND... | ✅ |
+| 5 | OLL-866F9103 | XX_FROM_AI_CREATE | NOT_RELATED (25%) | N/A | ✅ |
+
+**3/5 correct, 2 borderline ⚠️**
+
+- Rank 2: CA-BS-001 has a different error code but same flow + same ORA-00942 on the same endpoint. SIMILAR_ROOT_CAUSE is acceptable here.
+- Rank 3: EXTCOMMONORDER 503 classified as RELATED is borderline — different flow, endpoint, and error domain. The LLM is reasoning about infrastructure-level similarity. Acceptable deviation.
 
 ---
 
-## 6. Known Limitations (Phase 1)
+## 7. Bugs Fixed
 
-**Recurrence count is always 1** — The current query counts `HAD_ERROR` edges on the `FlowCode` node, but since multiple tickets for the same flow share one `FlowCode` node and one edge, the count stays at 1. This will be fixed in KG Phase 2.
+### KG-1 — KG Insights scoping bug
+**Problem:** `GET_KG_INSIGHTS_SQL` queried from the shared `Error` node, bleeding data across all logs with the same error code. All results showed the same root cause regardless of which ticket was matched.
 
-**Related Tickets not populated on first search** — `DUPLICATE_OF` and `RELATED_TO` edges are written only after a search runs and the LLM classifies results. A ticket ingested but never searched against will show `Related Tickets: None`.
+**Fix:** Added direct `JiraTicket --[HAD_ERROR/ON_ENDPOINT/HAS_ROOT_CAUSE]--> *` edges during ingestion. Query now reads directly from the JiraTicket node, fully scoped per ticket.
 
-**No resolution tracking yet** — The `FIXED_BY` edge type is defined in the schema but not yet written. When a Jira ticket is resolved, the resolution will be captured in KG Phase 3.
+### KG-2 — Recurrence count always 1 (then inflated)
+**Problem:** Original query counted `HAD_ERROR` edges on the `FlowCode` node — only 1 edge exists per flow+error pair so count was always 1. After Phase 1 fix it counted all `JiraTicket → Error` edges across all flows, giving inflated counts (6 instead of 3).
+
+**Fix:** Query now joins `FlowCode --[LOGGED_IN]--> JiraTicket --[HAD_ERROR]--> Error`, scoping the count to tickets for this specific flow + error combination.
+
+```sql
+SELECT COUNT(*)
+FROM OIC_KB_GRAPH_EDGES e1
+JOIN OIC_KB_GRAPH_EDGES e2 ON e1.TO_NODE   = e2.FROM_NODE
+                           AND e2.EDGE_TYPE = 'HAD_ERROR'
+                           AND e2.TO_NODE   = :error_node
+WHERE e1.FROM_NODE = :flow_node
+  AND e1.EDGE_TYPE = 'LOGGED_IN'
+  AND e1.TO_NODE   LIKE 'JiraTicket:%'
+```
 
 ---
 
-*Document version: KG Phase 1 — February 2026*
+## 8. TODO Backlog
+
+| # | Branch | Description | Priority |
+|---|---|---|---|
+| KG-3 | `feat/kg-phase2-patterns` | Pattern Intelligence — recurring error trends, top failing flows, `GET /kg/patterns` endpoint | Medium |
+| KG-4 | `feat/kg-phase3-fixed-by` | FIXED_BY edges — capture resolutions when Jira tickets are closed, surface fix history in search results | Medium |
+| KG-5 | `feat/kg-related-tickets` | Related Tickets currently empty on first search — pre-populate on ingestion using existing graph edges | Low |
+| KG-6 | `fix/ingest-timeout` | `/ingest/database` times out UI at 60s for large batches — convert to background job with `/ingest/status/{job_id}` | Low |
+
+---
+
+*Last updated: KG Phase 1 + recurrence fix — February 2026*
